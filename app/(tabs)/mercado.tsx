@@ -1,91 +1,100 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { supabase } from '@/lib/supabase';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-const indices = [
-  { nombre: 'Merval', valor: '2.184.310', cambio: '+2.1%', positivo: true },
-  { nombre: 'S&P 500', valor: '5.765', cambio: '+0.8%', positivo: true },
-  { nombre: 'Nasdaq', valor: '18.420', cambio: '+1.2%', positivo: true },
-  { nombre: 'BTC', valor: '83.4K', cambio: '+2.8%', positivo: true },
-];
-
-const cedears = [
-  { ticker: 'AAPL', valor: '$ 79.200', cambio: '+1.8%', positivo: true },
-  { ticker: 'GOOGL', valor: '$ 163.500', cambio: '-0.4%', positivo: false },
-  { ticker: 'MSFT', valor: '$ 108.000', cambio: '+2.1%', positivo: true },
-  { ticker: 'NVDA', valor: '$ 131.000', cambio: '+5.2%', positivo: true },
-  { ticker: 'AMZN', valor: '$ 182.000', cambio: '-1.1%', positivo: false },
-];
-
-const byma = [
-  { ticker: 'GGAL', valor: '$ 2.130', cambio: '+3.4%', positivo: true },
-  { ticker: 'YPF', valor: '$ 10.800', cambio: '+1.8%', positivo: true },
-  { ticker: 'PAMP', valor: '$ 980', cambio: '+2.2%', positivo: true },
-  { ticker: 'BMA', valor: '$ 9.100', cambio: '-0.5%', positivo: false },
-  { ticker: 'ALUA', valor: '$ 425', cambio: '+4.1%', positivo: true },
-];
-
-const crypto = [
-  { ticker: 'BTC', valor: 'USD 83.400', cambio: '+2.8%', positivo: true },
-  { ticker: 'ETH', valor: 'USD 3.840', cambio: '+1.5%', positivo: true },
-  { ticker: 'SOL', valor: 'USD 142', cambio: '-3.2%', positivo: false },
-];
-
-function FilaActivo({ ticker, valor, cambio, positivo }: any) {
-  return (
-    <View style={styles.fila}>
-      <View style={styles.filaIcono}>
-        <Text style={styles.filaIconoTexto}>{ticker[0]}</Text>
-      </View>
-      <Text style={styles.filaTicker}>{ticker}</Text>
-      <View style={{ flex: 1 }} />
-      <Text style={styles.filaValor}>{valor}</Text>
-      <View style={[styles.filaBadge, { backgroundColor: positivo ? '#00D26A22' : '#FF4D4D22' }]}>
-        <Text style={[styles.filaCambio, { color: positivo ? '#00D26A' : '#FF4D4D' }]}>{cambio}</Text>
-      </View>
-    </View>
-  );
-}
+type Precio = {
+  ticker: string;
+  precio: number;
+  variacion_pct: number;
+  moneda: string;
+  categoria: string;
+};
 
 export default function Mercado() {
+  const [precios, setPrecios] = useState<Precio[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [ultimaActualizacion, setUltimaActualizacion] = useState('');
+
+  async function cargarPrecios() {
+    setCargando(true);
+    const { data, error } = await supabase
+      .from('precios_cache')
+      .select('*')
+      .order('categoria');
+    if (data) {
+      setPrecios(data);
+      setUltimaActualizacion(new Date().toLocaleTimeString('es-AR'));
+    }
+    setCargando(false);
+  }
+
+  useEffect(() => { cargarPrecios(); }, []);
+
+  const ccl = precios.find(p => p.ticker === 'CCL')?.precio ?? 1285;
+  const cedears = precios.filter(p => p.categoria === 'cedear');
+  const nasdaq = precios.filter(p => p.categoria === 'nasdaq');
+  const crypto = precios.filter(p => p.categoria === 'crypto');
+
+  function FilaActivo({ item }: { item: Precio }) {
+    const positivo = item.variacion_pct >= 0;
+    return (
+      <View style={styles.fila}>
+        <View style={styles.filaIcono}>
+          <Text style={styles.filaIconoTexto}>{item.ticker[0]}</Text>
+        </View>
+        <Text style={styles.filaTicker}>{item.ticker.replace('.BA', '')}</Text>
+        <View style={{ flex: 1 }} />
+        <Text style={styles.filaValor}>
+          {item.moneda === 'USD' ? 'USD ' : '$ '}
+          {item.precio.toLocaleString('es-AR', { maximumFractionDigits: 2 })}
+        </Text>
+        <View style={[styles.filaBadge, { backgroundColor: positivo ? '#00D26A22' : '#FF4D4D22' }]}>
+          <Text style={[styles.filaCambio, { color: positivo ? '#00D26A' : '#FF4D4D' }]}>
+            {positivo ? '+' : ''}{item.variacion_pct.toFixed(2)}%
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  function Seccion({ titulo, datos }: { titulo: string; datos: Precio[] }) {
+    if (datos.length === 0) return null;
+    return (
+      <>
+        <Text style={styles.seccion}>{titulo}</Text>
+        <View style={styles.tabla}>
+          {datos.map((item) => <FilaActivo key={item.ticker} item={item} />)}
+        </View>
+      </>
+    );
+  }
+
   return (
     <ScrollView style={styles.container}>
-
-      {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.titulo}>Mercado 📊</Text>
-        <Text style={styles.subtitulo}>CCL <Text style={styles.ccl}>$1.285</Text> · 15:42hs</Text>
+        <TouchableOpacity onPress={cargarPrecios}>
+          <Text style={styles.actualizar}>🔄 Actualizar</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* ÍNDICES */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.indicesRow}>
-        {indices.map((idx) => (
-          <View key={idx.nombre} style={styles.indiceCard}>
-            <Text style={styles.indiceNombre}>{idx.nombre}</Text>
-            <Text style={styles.indiceValor}>{idx.valor}</Text>
-            <Text style={[styles.indiceCambio, { color: idx.positivo ? '#00D26A' : '#FF4D4D' }]}>
-              {idx.positivo ? '▲' : '▼'} {idx.cambio}
-            </Text>
-          </View>
-        ))}
-      </ScrollView>
+      <Text style={styles.subtitulo}>
+        CCL <Text style={styles.ccl}>${ccl.toLocaleString('es-AR')}</Text>
+        {ultimaActualizacion ? ` · ${ultimaActualizacion}` : ''}
+      </Text>
 
-      {/* CEDEARs */}
-      <Text style={styles.seccion}>🏷️ CEDEARs destacados</Text>
-      <View style={styles.tabla}>
-        {cedears.map((a) => <FilaActivo key={a.ticker} {...a} />)}
-      </View>
-
-      {/* BYMA */}
-      <Text style={styles.seccion}>🇦🇷 Acciones BYMA</Text>
-      <View style={styles.tabla}>
-        {byma.map((a) => <FilaActivo key={a.ticker} {...a} />)}
-      </View>
-
-      {/* CRYPTO */}
-      <Text style={styles.seccion}>₿ Crypto</Text>
-      <View style={styles.tabla}>
-        {crypto.map((a) => <FilaActivo key={a.ticker} {...a} />)}
-      </View>
-
+      {cargando ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#00D26A" />
+          <Text style={styles.loadingTexto}>Cargando precios reales...</Text>
+        </View>
+      ) : (
+        <>
+          <Seccion titulo="🏷️ CEDEARs" datos={cedears} />
+          <Seccion titulo="🌎 NYSE / NASDAQ" datos={nasdaq} />
+          <Seccion titulo="₿ Crypto" datos={crypto} />
+        </>
+      )}
     </ScrollView>
   );
 }
@@ -94,13 +103,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0A' },
   header: { padding: 20, paddingTop: 60, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   titulo: { color: '#F5F5F5', fontSize: 22, fontWeight: '800' },
-  subtitulo: { color: '#555', fontSize: 12 },
+  actualizar: { color: '#00D26A', fontSize: 13, fontWeight: '600' },
+  subtitulo: { color: '#555', fontSize: 12, paddingHorizontal: 20, marginBottom: 20 },
   ccl: { color: '#F5C842', fontWeight: '700' },
-  indicesRow: { paddingHorizontal: 20, marginBottom: 24 },
-  indiceCard: { backgroundColor: '#141414', borderRadius: 12, padding: 14, marginRight: 10, minWidth: 100, borderWidth: 1, borderColor: '#222' },
-  indiceNombre: { color: '#555', fontSize: 10, marginBottom: 4 },
-  indiceValor: { color: '#F5F5F5', fontSize: 14, fontWeight: '700' },
-  indiceCambio: { fontSize: 11, marginTop: 4 },
+  loadingContainer: { alignItems: 'center', marginTop: 60, gap: 16 },
+  loadingTexto: { color: '#555', fontSize: 14 },
   seccion: { color: '#F5F5F5', fontSize: 15, fontWeight: '700', paddingHorizontal: 20, marginBottom: 10 },
   tabla: { backgroundColor: '#141414', borderRadius: 12, marginHorizontal: 20, marginBottom: 20, paddingHorizontal: 16, borderWidth: 1, borderColor: '#222' },
   fila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1A1A1A', gap: 10 },
