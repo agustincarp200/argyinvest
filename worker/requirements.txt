@@ -1,0 +1,4 @@
+requests
+supabase
+yfinance
+python-dotenv
