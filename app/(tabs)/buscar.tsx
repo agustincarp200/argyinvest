@@ -1,70 +1,220 @@
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { supabase } from '@/lib/supabase';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-const categorias = [
-  { id: 'cedears', label: 'CEDEARs', icon: '🏷️', color: '#F5C842', cantidad: 5 },
-  { id: 'byma', label: 'BYMA', icon: '🇦🇷', color: '#4D9EFF', cantidad: 5 },
-  { id: 'nasdaq', label: 'NYSE/NASDAQ', icon: '🌎', color: '#A855F7', cantidad: 3 },
-  { id: 'fcis', label: 'FCIs', icon: '💰', color: '#22D3EE', cantidad: 3 },
-  { id: 'bonos', label: 'Bonos', icon: '📜', color: '#FF9D4D', cantidad: 3 },
-  { id: 'crypto', label: 'Crypto', icon: '₿', color: '#F59E0B', cantidad: 3 },
-];
+type Operacion = {
+  id: string;
+  ticker: string;
+  tipo: string;
+  cantidad: number;
+  precio: number;
+  comision: number;
+  moneda: string;
+  fecha: string;
+  notas: string;
+};
 
-const tendencias = [
-  { ticker: 'NVDA', valor: '$ 131.000', cambio: '+5.2%', positivo: true },
-  { ticker: 'GGAL', valor: '$ 2.130', cambio: '+3.4%', positivo: true },
-  { ticker: 'BTC', valor: 'USD 83.400', cambio: '+2.8%', positivo: true },
-  { ticker: 'SOL', valor: 'USD 142', cambio: '-3.2%', positivo: false },
-  { ticker: 'GOOGL', valor: '$ 163.500', cambio: '-0.4%', positivo: false },
-];
+export default function Historial() {
+  const [operaciones, setOperaciones] = useState<Operacion[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [guardando, setGuardando] = useState(false);
 
-export default function Buscar() {
+  // Form
+  const [ticker, setTicker] = useState('');
+  const [tipo, setTipo] = useState('COMPRA');
+  const [cantidad, setCantidad] = useState('');
+  const [precio, setPrecio] = useState('');
+  const [comision, setComision] = useState('0');
+  const [moneda, setMoneda] = useState('ARS');
+  const [notas, setNotas] = useState('');
+
+  async function cargarOperaciones() {
+    setCargando(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from('operaciones')
+      .select('*')
+      .eq('usuario_id', user.id)
+      .order('fecha', { ascending: false });
+    if (data) setOperaciones(data);
+    setCargando(false);
+  }
+
+  useEffect(() => { cargarOperaciones(); }, []);
+
+  async function agregarOperacion() {
+    if (!ticker || !cantidad || !precio) {
+      Alert.alert('Error', 'Completá ticker, cantidad y precio');
+      return;
+    }
+    setGuardando(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase.from('operaciones').insert({
+      usuario_id: user.id,
+      ticker: ticker.toUpperCase(),
+      tipo,
+      cantidad: parseFloat(cantidad),
+      precio: parseFloat(precio),
+      comision: parseFloat(comision) || 0,
+      moneda,
+      fecha: new Date().toISOString().split('T')[0],
+      notas,
+    });
+
+    if (error) Alert.alert('Error', error.message);
+    else {
+      setModalVisible(false);
+      setTicker(''); setCantidad(''); setPrecio(''); setComision('0'); setNotas('');
+      cargarOperaciones();
+    }
+    setGuardando(false);
+  }
+
+  const totalCompras = operaciones
+    .filter(o => o.tipo === 'COMPRA')
+    .reduce((s, o) => s + o.cantidad * o.precio, 0);
+
+  const totalVentas = operaciones
+    .filter(o => o.tipo === 'VENTA')
+    .reduce((s, o) => s + o.cantidad * o.precio, 0);
+
   return (
     <ScrollView style={styles.container}>
 
       {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.titulo}>Buscar 🔍</Text>
+        <View>
+          <Text style={styles.titulo}>Historial 📋</Text>
+          <Text style={styles.subtitulo}>{operaciones.length} operaciones</Text>
+        </View>
+        <TouchableOpacity style={styles.botonAgregar} onPress={() => setModalVisible(true)}>
+          <Text style={styles.botonAgregarTexto}>+ Nueva</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* BARRA DE BÚSQUEDA */}
-      <View style={styles.searchContainer}>
-        <Text style={styles.searchIcono}>🔍</Text>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar ticker, empresa o fondo..."
-          placeholderTextColor="#555"
-        />
+      {/* RESUMEN */}
+      <View style={styles.tarjetasRow}>
+        <View style={styles.tarjeta}>
+          <Text style={styles.tarjetaLabel}>Total comprado</Text>
+          <Text style={[styles.tarjetaValor, { color: '#00D26A' }]}>
+            $ {totalCompras.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+          </Text>
+        </View>
+        <View style={styles.tarjeta}>
+          <Text style={styles.tarjetaLabel}>Total vendido</Text>
+          <Text style={[styles.tarjetaValor, { color: '#FF4D4D' }]}>
+            $ {totalVentas.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+          </Text>
+        </View>
       </View>
 
-      {/* CATEGORÍAS */}
-      <Text style={styles.seccion}>CATEGORÍAS</Text>
-      <View style={styles.categoriasGrid}>
-        {categorias.map((cat) => (
-          <TouchableOpacity key={cat.id} style={[styles.categoriaCard, { borderColor: cat.color + '44' }]}>
-            <Text style={styles.categoriaIcono}>{cat.icon}</Text>
-            <Text style={[styles.categoriaLabel, { color: cat.color }]}>{cat.label}</Text>
-            <Text style={styles.categoriaCantidad}>{cat.cantidad} activos</Text>
+      {cargando ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#00D26A" />
+        </View>
+      ) : operaciones.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyTexto}>No hay operaciones todavía</Text>
+          <TouchableOpacity style={styles.botonAgregarEmpty} onPress={() => setModalVisible(true)}>
+            <Text style={styles.botonAgregarTexto}>+ Registrar primera operación</Text>
           </TouchableOpacity>
-        ))}
-      </View>
+        </View>
+      ) : (
+        <View style={styles.tabla}>
+          {operaciones.map((op, i) => {
+            const esCompra = op.tipo === 'COMPRA';
+            const total = op.cantidad * op.precio;
+            return (
+              <View key={op.id} style={[styles.fila, i === operaciones.length - 1 && { borderBottomWidth: 0 }]}>
+                <View style={[styles.filaIcono, { backgroundColor: esCompra ? '#00D26A22' : '#FF4D4D22' }]}>
+                  <Text style={[styles.filaIconoTexto, { color: esCompra ? '#00D26A' : '#FF4D4D' }]}>
+                    {esCompra ? '↑' : '↓'}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={styles.filaTicker}>{op.ticker}</Text>
+                    <View style={[styles.tipoBadge, { backgroundColor: esCompra ? '#00D26A22' : '#FF4D4D22' }]}>
+                      <Text style={[styles.tipoTexto, { color: esCompra ? '#00D26A' : '#FF4D4D' }]}>{op.tipo}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.filaDetalle}>
+                    {op.cantidad} u. · {op.moneda} {op.precio.toLocaleString('es-AR')}
+                  </Text>
+                  {op.notas ? <Text style={styles.filaNota}>{op.notas}</Text> : null}
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.filaTotal}>
+                    $ {total.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+                  </Text>
+                  <Text style={styles.filaFecha}>{op.fecha}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
 
-      {/* TENDENCIAS */}
-      <Text style={styles.seccion}>TENDENCIAS HOY</Text>
-      <View style={styles.tabla}>
-        {tendencias.map((a) => (
-          <View key={a.ticker} style={styles.fila}>
-            <View style={styles.filaIcono}>
-              <Text style={styles.filaIconoTexto}>{a.ticker[0]}</Text>
+      {/* MODAL */}
+      <Modal visible={modalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitulo}>Nueva operación</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <Text style={styles.modalCerrar}>✕</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.filaTicker}>{a.ticker}</Text>
-            <View style={{ flex: 1 }} />
-            <Text style={styles.filaValor}>{a.valor}</Text>
-            <View style={[styles.filaBadge, { backgroundColor: a.positivo ? '#00D26A22' : '#FF4D4D22' }]}>
-              <Text style={[styles.filaCambio, { color: a.positivo ? '#00D26A' : '#FF4D4D' }]}>{a.cambio}</Text>
+
+            <TextInput style={styles.input} placeholder="Ticker (ej: GGAL, AAPL)" placeholderTextColor="#555"
+              value={ticker} onChangeText={t => setTicker(t.toUpperCase())} autoCapitalize="characters" />
+
+            {/* Tipo */}
+            <Text style={styles.inputLabel}>Tipo de operación</Text>
+            <View style={styles.tipoRow}>
+              {['COMPRA', 'VENTA'].map(t => (
+                <TouchableOpacity key={t}
+                  style={[styles.tipoBoton,
+                    tipo === t && { backgroundColor: t === 'COMPRA' ? '#00D26A' : '#FF4D4D',
+                    borderColor: t === 'COMPRA' ? '#00D26A' : '#FF4D4D' }]}
+                  onPress={() => setTipo(t)}>
+                  <Text style={[styles.tipoBotonTexto, tipo === t && { color: '#000' }]}>{t}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
+
+            <TextInput style={styles.input} placeholder="Cantidad" placeholderTextColor="#555"
+              value={cantidad} onChangeText={setCantidad} keyboardType="numeric" />
+            <TextInput style={styles.input} placeholder="Precio unitario" placeholderTextColor="#555"
+              value={precio} onChangeText={setPrecio} keyboardType="numeric" />
+            <TextInput style={styles.input} placeholder="Comisión (opcional)" placeholderTextColor="#555"
+              value={comision} onChangeText={setComision} keyboardType="numeric" />
+
+            {/* Moneda */}
+            <Text style={styles.inputLabel}>Moneda</Text>
+            <View style={styles.monedaRow}>
+              {['ARS', 'USD'].map(m => (
+                <TouchableOpacity key={m}
+                  style={[styles.monedaBoton, moneda === m && { backgroundColor: '#00D26A', borderColor: '#00D26A' }]}
+                  onPress={() => setMoneda(m)}>
+                  <Text style={[styles.monedaTexto, moneda === m && { color: '#000' }]}>{m}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput style={styles.input} placeholder="Notas (opcional)" placeholderTextColor="#555"
+              value={notas} onChangeText={setNotas} />
+
+            <TouchableOpacity style={styles.botonGuardar} onPress={agregarOperacion} disabled={guardando}>
+              {guardando ? <ActivityIndicator color="#000" /> : <Text style={styles.botonGuardarTexto}>Guardar operación</Text>}
+            </TouchableOpacity>
           </View>
-        ))}
-      </View>
+        </View>
+      </Modal>
 
     </ScrollView>
   );
@@ -72,23 +222,43 @@ export default function Buscar() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0A' },
-  header: { padding: 20, paddingTop: 60 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 60 },
   titulo: { color: '#F5F5F5', fontSize: 22, fontWeight: '800' },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#141414', borderRadius: 12, marginHorizontal: 20, marginBottom: 24, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: '#222', gap: 10 },
-  searchIcono: { fontSize: 16 },
-  searchInput: { flex: 1, color: '#F5F5F5', fontSize: 14 },
-  seccion: { color: '#888', fontSize: 11, fontWeight: '600', paddingHorizontal: 20, marginBottom: 12, letterSpacing: 1 },
-  categoriasGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, gap: 10, marginBottom: 24 },
-  categoriaCard: { width: '47%', backgroundColor: '#141414', borderRadius: 12, padding: 14, borderWidth: 1.5 },
-  categoriaIcono: { fontSize: 24, marginBottom: 8 },
-  categoriaLabel: { fontSize: 13, fontWeight: '700', marginBottom: 4 },
-  categoriaCantidad: { color: '#555', fontSize: 11 },
+  subtitulo: { color: '#555', fontSize: 12, marginTop: 2 },
+  botonAgregar: { backgroundColor: '#00D26A', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
+  botonAgregarTexto: { color: '#000', fontWeight: '700', fontSize: 13 },
+  tarjetasRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, marginBottom: 20 },
+  tarjeta: { flex: 1, backgroundColor: '#141414', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#222' },
+  tarjetaLabel: { color: '#555', fontSize: 10, marginBottom: 4 },
+  tarjetaValor: { fontSize: 14, fontWeight: '700' },
+  loadingContainer: { alignItems: 'center', marginTop: 80 },
+  emptyContainer: { alignItems: 'center', marginTop: 40, gap: 16 },
+  emptyTexto: { color: '#555', fontSize: 14 },
+  botonAgregarEmpty: { backgroundColor: '#00D26A', borderRadius: 20, paddingHorizontal: 20, paddingVertical: 10 },
   tabla: { backgroundColor: '#141414', borderRadius: 12, marginHorizontal: 20, marginBottom: 20, paddingHorizontal: 16, borderWidth: 1, borderColor: '#222' },
-  fila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1A1A1A', gap: 10 },
-  filaIcono: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#1A1A1A', alignItems: 'center', justifyContent: 'center' },
-  filaIconoTexto: { color: '#888', fontWeight: '800', fontSize: 14 },
-  filaTicker: { color: '#F5F5F5', fontWeight: '700', fontSize: 14 },
-  filaValor: { color: '#F5F5F5', fontSize: 13, marginRight: 8 },
-  filaBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  filaCambio: { fontSize: 12, fontWeight: '700' },
+  fila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#1A1A1A', gap: 12 },
+  filaIcono: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  filaIconoTexto: { fontWeight: '800', fontSize: 20 },
+  filaTicker: { color: '#F5F5F5', fontWeight: '700', fontSize: 15 },
+  filaDetalle: { color: '#888', fontSize: 11, marginTop: 2 },
+  filaNota: { color: '#555', fontSize: 10, marginTop: 2 },
+  filaTotal: { color: '#F5F5F5', fontWeight: '700', fontSize: 14 },
+  filaFecha: { color: '#555', fontSize: 11, marginTop: 2 },
+  tipoBadge: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  tipoTexto: { fontSize: 10, fontWeight: '700' },
+  modalOverlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end' },
+  modalContainer: { backgroundColor: '#141414', borderRadius: 20, padding: 24, borderWidth: 1, borderColor: '#222' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitulo: { color: '#F5F5F5', fontSize: 18, fontWeight: '700' },
+  modalCerrar: { color: '#555', fontSize: 20 },
+  input: { backgroundColor: '#1A1A1A', borderRadius: 10, padding: 14, color: '#F5F5F5', fontSize: 14, marginBottom: 12, borderWidth: 1, borderColor: '#222' },
+  inputLabel: { color: '#888', fontSize: 12, marginBottom: 8 },
+  tipoRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  tipoBoton: { flex: 1, backgroundColor: '#1A1A1A', borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#222' },
+  tipoBotonTexto: { color: '#888', fontWeight: '700' },
+  monedaRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  monedaBoton: { flex: 1, backgroundColor: '#1A1A1A', borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#222' },
+  monedaTexto: { color: '#888', fontWeight: '700' },
+  botonGuardar: { backgroundColor: '#00D26A', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
+  botonGuardarTexto: { color: '#000', fontWeight: '800', fontSize: 15 },
 });
