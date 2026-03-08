@@ -32,6 +32,7 @@ export default function Mercado() {
 
   const ccl = precios.find(p => p.ticker === 'CCL')?.precio ?? 1285;
   const cedears = precios.filter(p => p.categoria === 'cedear');
+  const byma = precios.filter(p => p.categoria === 'byma');
   const nasdaq = precios.filter(p => p.categoria === 'nasdaq');
   const crypto = precios.filter(p => p.categoria === 'crypto');
 
@@ -91,6 +92,7 @@ export default function Mercado() {
       ) : (
         <>
           <Seccion titulo="🏷️ CEDEARs" datos={cedears} />
+          <Seccion titulo="🇦🇷 Acciones BYMA" datos={byma} />
           <Seccion titulo="🌎 NYSE / NASDAQ" datos={nasdaq} />
           <Seccion titulo="₿ Crypto" datos={crypto} />
         </>
