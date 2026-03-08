@@ -102,4 +102,9 @@ def main():
     print("\n✅ Worker finalizado!\n")
 
 if __name__ == "__main__":
-    main()
+    import time
+    print("⏰ Scheduler iniciado - actualizando cada 5 minutos")
+    while True:
+        main()
+        print("💤 Esperando 5 minutos...")
+        time.sleep(300)
