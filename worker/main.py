@@ -11,8 +11,9 @@ supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 # ── TICKERS ────────────────────────────────────────────
 CEDEARS = ["AAPL", "GOOGL", "MSFT", "AMZN", "NVDA", "META", "TSLA", "AMD", "BABA", "MELI"]
-NASDAQ  = ["AAPL", "GOOGL", "MSFT", "AMZN", "NVDA", "META", "TSLA", "AMD"]
+NASDAQ  = ["AAPL", "GOOGL", "MSFT", "AMZN", "NVDA", "META", "TSLA", "AMD", "BABA", "MELI"]
 CRYPTO  = ["bitcoin", "ethereum", "solana", "cardano", "tether"]
+BYMA    = ["GGAL.BA", "PAMP.BA", "BMA.BA", "ALUA.BA", "TXAR.BA", "CRES.BA", "CEPU.BA", "LOMA.BA", "VALO.BA", "SUPV.BA"]
 
 def get_dolar_ccl():
     try:
@@ -98,7 +99,12 @@ def main():
     crypto = get_crypto_prices()
     for ticker, data in crypto.items():
         guardar_precios(ticker, data["precio"], data["cambio"], "USD", "crypto", "coingecko")
-
+# Precios BYMA
+    print("\n🇦🇷 Obteniendo precios BYMA...")
+    byma = get_yahoo_prices(BYMA)
+    for ticker, data in byma.items():
+        ticker_limpio = ticker.replace(".BA", "")
+        guardar_precios(ticker_limpio, data["precio"], data["cambio"], "ARS", "byma", "yahoo")
     print("\n✅ Worker finalizado!\n")
 
 if __name__ == "__main__":
