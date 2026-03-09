@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 
 type Posicion = {
   id: string;
@@ -11,8 +11,6 @@ type Posicion = {
   cantidad: number;
   precio_compra: number;
   moneda: string;
-  precio_actual?: number;
-  variacion_pct?: number;
 };
 
 const CATEGORIAS = [
@@ -33,13 +31,25 @@ export default function Cartera() {
   const [modalVisible, setModalVisible] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
-  // Form state
   const [ticker, setTicker] = useState('');
   const [nombre, setNombre] = useState('');
   const [cantidad, setCantidad] = useState('');
   const [precioCompra, setPrecioCompra] = useState('');
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('cedear');
   const [moneda, setMoneda] = useState('ARS');
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      UIManager.setLayoutAnimationEnabledExperimental?.(true);
+    }
+    const show = Keyboard.addListener('keyboardWillShow', () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    });
+    const hide = Keyboard.addListener('keyboardWillHide', () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   async function cargarDatos() {
     setCargando(true);
@@ -90,7 +100,6 @@ export default function Cartera() {
     setGuardando(false);
   }
 
-  // Cálculos
   const getPrecioActual = (pos: Posicion) => {
     const key = pos.categoria === 'cedear' ? `${pos.ticker}.BA` : pos.ticker;
     return precios[key] ?? precios[pos.ticker] ?? pos.precio_compra;
@@ -118,7 +127,7 @@ export default function Cartera() {
 
       {cargando ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00D26A" />
+          <ActivityIndicator size="large" color={theme.green} />
         </View>
       ) : (
         <>
@@ -128,8 +137,8 @@ export default function Cartera() {
             <Text style={styles.totalValor}>
               $ {totalActual.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
             </Text>
-            <View style={[styles.variacionBadge, { backgroundColor: positivo ? '#00D26A22' : '#FF4D4D22' }]}>
-              <Text style={[styles.variacionTexto, { color: positivo ? '#00D26A' : '#FF4D4D' }]}>
+            <View style={[styles.variacionBadge, { backgroundColor: positivo ? theme.greenDim : theme.redDim }]}>
+              <Text style={[styles.variacionTexto, { color: positivo ? theme.green : theme.red }]}>
                 {positivo ? '+' : ''}{gananciaPct.toFixed(2)}%
                 {'  '}({positivo ? '+' : ''}$ {Math.abs(ganancia).toLocaleString('es-AR', { maximumFractionDigits: 0 })})
               </Text>
@@ -144,11 +153,11 @@ export default function Cartera() {
             </View>
             <View style={styles.tarjeta}>
               <Text style={styles.tarjetaLabel}>Activos</Text>
-              <Text style={[styles.tarjetaValor, { color: '#4D9EFF' }]}>{posiciones.length}</Text>
+              <Text style={[styles.tarjetaValor, { color: theme.blue }]}>{posiciones.length}</Text>
             </View>
             <View style={styles.tarjeta}>
               <Text style={styles.tarjetaLabel}>G/P $</Text>
-              <Text style={[styles.tarjetaValor, { color: positivo ? '#00D26A' : '#FF4D4D' }]}>
+              <Text style={[styles.tarjetaValor, { color: positivo ? theme.green : theme.red }]}>
                 {positivo ? '+' : ''}$ {Math.abs(ganancia).toLocaleString('es-AR', { maximumFractionDigits: 0 })}
               </Text>
             </View>
@@ -174,8 +183,8 @@ export default function Cartera() {
                 const cat = CATEGORIAS.find(c => c.id === pos.categoria);
                 return (
                   <View key={pos.id} style={[styles.fila, i === posiciones.length - 1 && { borderBottomWidth: 0 }]}>
-                    <View style={[styles.filaIcono, { backgroundColor: (cat?.color ?? '#00D26A') + '22' }]}>
-                      <Text style={[styles.filaIconoTexto, { color: cat?.color ?? '#00D26A' }]}>
+                    <View style={[styles.filaIcono, { backgroundColor: (cat?.color ?? theme.green) + '22' }]}>
+                      <Text style={[styles.filaIconoTexto, { color: cat?.color ?? theme.green }]}>
                         {pos.ticker[0]}
                       </Text>
                     </View>
@@ -186,7 +195,7 @@ export default function Cartera() {
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
                       <Text style={styles.filaValor}>$ {valorActual.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</Text>
-                      <Text style={[styles.filaGP, { color: esPositivo ? '#00D26A' : '#FF4D4D' }]}>
+                      <Text style={[styles.filaGP, { color: esPositivo ? theme.green : theme.red }]}>
                         {esPositivo ? '+' : ''}{gpPct.toFixed(2)}%
                       </Text>
                     </View>
@@ -198,55 +207,62 @@ export default function Cartera() {
         </>
       )}
 
-      {/* MODAL AGREGAR POSICIÓN */}
+      {/* MODAL */}
       <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitulo}>Agregar posición</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Text style={styles.modalCerrar}>✕</Text>
-              </TouchableOpacity>
-            </View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}>
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => Keyboard.dismiss()}
+            style={styles.modalOverlay}>
+            <TouchableOpacity activeOpacity={1} style={styles.modalContainer}>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitulo}>Agregar posición</Text>
+                  <TouchableOpacity onPress={() => setModalVisible(false)}>
+                    <Text style={styles.modalCerrar}>✕</Text>
+                  </TouchableOpacity>
+                </View>
 
-            <TextInput style={styles.input} placeholder="Ticker (ej: GGAL, AAPL, BTC)" placeholderTextColor="#555"
-              value={ticker} onChangeText={t => setTicker(t.toUpperCase())} autoCapitalize="characters" />
-            <TextInput style={styles.input} placeholder="Nombre (opcional)" placeholderTextColor="#555"
-              value={nombre} onChangeText={setNombre} />
-            <TextInput style={styles.input} placeholder="Cantidad" placeholderTextColor="#555"
-              value={cantidad} onChangeText={setCantidad} keyboardType="numeric" />
-            <TextInput style={styles.input} placeholder="Precio de compra" placeholderTextColor="#555"
-              value={precioCompra} onChangeText={setPrecioCompra} keyboardType="numeric" />
+                <TextInput style={styles.input} placeholder="Ticker (ej: GGAL, AAPL, BTC)" placeholderTextColor={theme.gray}
+                  value={ticker} onChangeText={t => setTicker(t.toUpperCase())} autoCapitalize="characters" />
+                <TextInput style={styles.input} placeholder="Nombre (opcional)" placeholderTextColor={theme.gray}
+                  value={nombre} onChangeText={setNombre} />
+                <TextInput style={styles.input} placeholder="Cantidad" placeholderTextColor={theme.gray}
+                  value={cantidad} onChangeText={setCantidad} keyboardType="numeric" />
+                <TextInput style={styles.input} placeholder="Precio de compra" placeholderTextColor={theme.gray}
+                  value={precioCompra} onChangeText={setPrecioCompra} keyboardType="numeric" />
 
-            {/* Categoría */}
-            <Text style={styles.inputLabel}>Categoría</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-              {CATEGORIAS.map(cat => (
-                <TouchableOpacity key={cat.id}
-                  style={[styles.catBoton, categoriaSeleccionada === cat.id && { backgroundColor: cat.color, borderColor: cat.color }]}
-                  onPress={() => setCategoriaSeleccionada(cat.id)}>
-                  <Text style={[styles.catTexto, categoriaSeleccionada === cat.id && { color: '#000' }]}>{cat.label}</Text>
+                <Text style={styles.inputLabel}>Categoría</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                  {CATEGORIAS.map(cat => (
+                    <TouchableOpacity key={cat.id}
+                      style={[styles.catBoton, categoriaSeleccionada === cat.id && { backgroundColor: cat.color, borderColor: cat.color }]}
+                      onPress={() => setCategoriaSeleccionada(cat.id)}>
+                      <Text style={[styles.catTexto, categoriaSeleccionada === cat.id && { color: '#000' }]}>{cat.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                <Text style={styles.inputLabel}>Moneda</Text>
+                <View style={styles.monedaRow}>
+                  {['ARS', 'USD'].map(m => (
+                    <TouchableOpacity key={m}
+                      style={[styles.monedaBoton, moneda === m && { backgroundColor: theme.green, borderColor: theme.green }]}
+                      onPress={() => setMoneda(m)}>
+                      <Text style={[styles.monedaTexto, moneda === m && { color: '#000' }]}>{m}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TouchableOpacity style={styles.botonGuardar} onPress={agregarPosicion} disabled={guardando}>
+                  {guardando ? <ActivityIndicator color="#000" /> : <Text style={styles.botonGuardarTexto}>Guardar posición</Text>}
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            {/* Moneda */}
-            <Text style={styles.inputLabel}>Moneda</Text>
-            <View style={styles.monedaRow}>
-              {['ARS', 'USD'].map(m => (
-                <TouchableOpacity key={m}
-                  style={[styles.monedaBoton, moneda === m && { backgroundColor: '#00D26A', borderColor: '#00D26A' }]}
-                  onPress={() => setMoneda(m)}>
-                  <Text style={[styles.monedaTexto, moneda === m && { color: '#000' }]}>{m}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TouchableOpacity style={styles.botonGuardar} onPress={agregarPosicion} disabled={guardando}>
-              {guardando ? <ActivityIndicator color="#000" /> : <Text style={styles.botonGuardarTexto}>Guardar posición</Text>}
+              </ScrollView>
             </TouchableOpacity>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
     </ScrollView>
@@ -284,7 +300,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   filaValor: { color: theme.white, fontWeight: '700', fontSize: 14 },
   filaGP: { fontSize: 12, fontWeight: '600', marginTop: 2 },
   modalOverlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end' },
-  modalContainer: { backgroundColor: theme.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: theme.border },
+  modalContainer: { backgroundColor: theme.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: theme.border, maxHeight: '90%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitulo: { color: theme.white, fontSize: 18, fontWeight: '700' },
   modalCerrar: { color: theme.gray, fontSize: 20 },
@@ -295,6 +311,6 @@ const getStyles = (theme: any) => StyleSheet.create({
   monedaRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
   monedaBoton: { flex: 1, backgroundColor: theme.card2, borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: theme.border },
   monedaTexto: { color: theme.lgray, fontWeight: '700' },
-  botonGuardar: { backgroundColor: theme.green, borderRadius: 12, padding: 16, alignItems: 'center' },
+  botonGuardar: { backgroundColor: theme.green, borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 8 },
   botonGuardarTexto: { color: '#000', fontWeight: '800', fontSize: 15 },
 });

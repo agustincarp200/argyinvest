@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 type Operacion = {
   id: string;
@@ -51,18 +51,11 @@ export default function Historial() {
   const [notas, setNotas] = useState('');
   const [fecha, setFecha] = useState(fechaAInput(new Date().toISOString().split('T')[0]));
 
-  useEffect(() => {
-    if (Platform.OS === 'android') {
-      UIManager.setLayoutAnimationEnabledExperimental?.(true);
-    }
-    const show = Keyboard.addListener('keyboardWillShow', () => {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    });
-    const hide = Keyboard.addListener('keyboardWillHide', () => {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    });
-    return () => { show.remove(); hide.remove(); };
-  }, []);
+  const refCantidad = useRef<TextInput>(null);
+  const refPrecio = useRef<TextInput>(null);
+  const refComision = useRef<TextInput>(null);
+  const refFecha = useRef<TextInput>(null);
+  const refNotas = useRef<TextInput>(null);
 
   async function cargarOperaciones() {
     setCargando(true);
@@ -126,7 +119,6 @@ export default function Historial() {
   return (
     <ScrollView style={styles.container}>
 
-      {/* HEADER */}
       <View style={styles.header}>
         <View>
           <Text style={styles.titulo}>Historial 📋</Text>
@@ -137,7 +129,6 @@ export default function Historial() {
         </TouchableOpacity>
       </View>
 
-      {/* RESUMEN */}
       <View style={styles.tarjetasRow}>
         <View style={styles.tarjeta}>
           <Text style={styles.tarjetaLabel}>Total comprado</Text>
@@ -200,7 +191,6 @@ export default function Historial() {
         </View>
       )}
 
-      {/* MODAL */}
       <Modal visible={modalVisible} animationType="slide" transparent>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -210,7 +200,7 @@ export default function Historial() {
             onPress={() => Keyboard.dismiss()}
             style={styles.modalOverlay}>
             <TouchableOpacity activeOpacity={1} style={styles.modalContainer}>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitulo}>Nueva operación</Text>
                   <TouchableOpacity onPress={() => setModalVisible(false)}>
@@ -219,7 +209,8 @@ export default function Historial() {
                 </View>
 
                 <TextInput style={styles.input} placeholder="Ticker (ej: GGAL, AAPL)" placeholderTextColor={theme.gray}
-                  value={ticker} onChangeText={t => setTicker(t.toUpperCase())} autoCapitalize="characters" />
+                  value={ticker} onChangeText={t => setTicker(t.toUpperCase())} autoCapitalize="characters"
+                  returnKeyType="next" onSubmitEditing={() => refCantidad.current?.focus()} blurOnSubmit={false} />
 
                 <Text style={styles.inputLabel}>Tipo de operación</Text>
                 <View style={styles.tipoRow}>
@@ -235,11 +226,14 @@ export default function Historial() {
                 </View>
 
                 <TextInput style={styles.input} placeholder="Cantidad" placeholderTextColor={theme.gray}
-                  value={cantidad} onChangeText={setCantidad} keyboardType="numeric" />
+                  value={cantidad} onChangeText={setCantidad} keyboardType="numeric"
+                  ref={refCantidad} returnKeyType="next" onSubmitEditing={() => refPrecio.current?.focus()} blurOnSubmit={false} />
                 <TextInput style={styles.input} placeholder="Precio unitario" placeholderTextColor={theme.gray}
-                  value={precio} onChangeText={setPrecio} keyboardType="numeric" />
+                  value={precio} onChangeText={setPrecio} keyboardType="numeric"
+                  ref={refPrecio} returnKeyType="next" onSubmitEditing={() => refComision.current?.focus()} blurOnSubmit={false} />
                 <TextInput style={styles.input} placeholder="Comisión (opcional)" placeholderTextColor={theme.gray}
-                  value={comision} onChangeText={setComision} keyboardType="numeric" />
+                  value={comision} onChangeText={setComision} keyboardType="numeric"
+                  ref={refComision} returnKeyType="next" onSubmitEditing={() => refFecha.current?.focus()} blurOnSubmit={false} />
 
                 <Text style={styles.inputLabel}>Moneda</Text>
                 <View style={styles.monedaRow}>
@@ -254,10 +248,12 @@ export default function Historial() {
 
                 <Text style={styles.inputLabel}>Fecha</Text>
                 <TextInput style={styles.input} placeholder="DD/MM/AAAA" placeholderTextColor={theme.gray}
-                  value={fecha} onChangeText={t => setFecha(formatearFechaInput(t))} keyboardType="numeric" />
+                  value={fecha} onChangeText={t => setFecha(formatearFechaInput(t))} keyboardType="numeric"
+                  ref={refFecha} returnKeyType="next" onSubmitEditing={() => refNotas.current?.focus()} blurOnSubmit={false} />
 
                 <TextInput style={styles.input} placeholder="Notas (opcional)" placeholderTextColor={theme.gray}
-                  value={notas} onChangeText={setNotas} />
+                  value={notas} onChangeText={setNotas}
+                  ref={refNotas} returnKeyType="done" onSubmitEditing={() => Keyboard.dismiss()} />
 
                 <TouchableOpacity style={styles.botonGuardar} onPress={agregarOperacion} disabled={guardando}>
                   {guardando ? <ActivityIndicator color="#000" /> : <Text style={styles.botonGuardarTexto}>Guardar operación</Text>}
