@@ -15,6 +15,25 @@ type Operacion = {
   notas: string;
 };
 
+function fechaAInput(iso: string) {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function inputAFecha(input: string) {
+  const [d, m, y] = input.split('/');
+  if (!d || !m || !y) return null;
+  return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+}
+
+function formatearFechaInput(texto: string) {
+  const solo = texto.replace(/\D/g, '').slice(0, 8);
+  let resultado = solo;
+  if (solo.length > 2) resultado = solo.slice(0,2) + '/' + solo.slice(2);
+  if (solo.length > 4) resultado = solo.slice(0,2) + '/' + solo.slice(2,4) + '/' + solo.slice(4);
+  return resultado;
+}
+
 export default function Historial() {
   const { theme } = useTheme();
   const styles = getStyles(theme);
@@ -30,6 +49,7 @@ export default function Historial() {
   const [comision, setComision] = useState('0');
   const [moneda, setMoneda] = useState('ARS');
   const [notas, setNotas] = useState('');
+  const [fecha, setFecha] = useState(fechaAInput(new Date().toISOString().split('T')[0]));
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -64,6 +84,11 @@ export default function Historial() {
       Alert.alert('Error', 'Completá ticker, cantidad y precio');
       return;
     }
+    const fechaISO = inputAFecha(fecha);
+    if (!fechaISO) {
+      Alert.alert('Error', 'Fecha inválida. Usá el formato DD/MM/AAAA');
+      return;
+    }
     setGuardando(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -76,7 +101,7 @@ export default function Historial() {
       precio: parseFloat(precio),
       comision: parseFloat(comision) || 0,
       moneda,
-      fecha: new Date().toISOString().split('T')[0],
+      fecha: fechaISO,
       notas,
     });
 
@@ -84,6 +109,7 @@ export default function Historial() {
     else {
       setModalVisible(false);
       setTicker(''); setCantidad(''); setPrecio(''); setComision('0'); setNotas('');
+      setFecha(fechaAInput(new Date().toISOString().split('T')[0]));
       cargarOperaciones();
     }
     setGuardando(false);
@@ -166,7 +192,7 @@ export default function Historial() {
                   <Text style={styles.filaTotal}>
                     $ {total.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
                   </Text>
-                  <Text style={styles.filaFecha}>{op.fecha}</Text>
+                  <Text style={styles.filaFecha}>{fechaAInput(op.fecha)}</Text>
                 </View>
               </View>
             );
@@ -225,6 +251,10 @@ export default function Historial() {
                     </TouchableOpacity>
                   ))}
                 </View>
+
+                <Text style={styles.inputLabel}>Fecha</Text>
+                <TextInput style={styles.input} placeholder="DD/MM/AAAA" placeholderTextColor={theme.gray}
+                  value={fecha} onChangeText={t => setFecha(formatearFechaInput(t))} keyboardType="numeric" />
 
                 <TextInput style={styles.input} placeholder="Notas (opcional)" placeholderTextColor={theme.gray}
                   value={notas} onChangeText={setNotas} />
