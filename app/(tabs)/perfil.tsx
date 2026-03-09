@@ -1,3 +1,4 @@
+import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -18,6 +19,7 @@ export default function Perfil() {
     { icon: '📅', label: 'Calendario de pagos', desc: 'Dividendos y vencimientos' },
     { icon: '🌙', label: 'Modo oscuro', desc: isDark ? 'Activo' : 'Inactivo' },
     { icon: '⚙️', label: 'Configuración', desc: 'Cuenta y preferencias' },
+    { icon: '🚪', label: 'Cerrar sesión', desc: 'Salir de tu cuenta' },
   ];
 
   return (
@@ -62,13 +64,17 @@ export default function Perfil() {
       {/* OPCIONES */}
       <View style={styles.tabla}>
         {opciones.map((op, i) => (
-          <TouchableOpacity key={i} style={styles.opcionFila}
-            onPress={op.label === 'Modo oscuro' ? toggleTheme : undefined}>
+          <TouchableOpacity key={i} style={[styles.opcionFila, i === opciones.length - 1 && { borderBottomWidth: 0 }]}
+            onPress={
+              op.label === 'Modo oscuro' ? toggleTheme :
+              op.label === 'Cerrar sesión' ? () => supabase.auth.signOut() :
+              undefined
+            }>
             <View style={styles.opcionIcono}>
               <Text style={{ fontSize: 18 }}>{op.icon}</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.opcionLabel}>{op.label}</Text>
+              <Text style={[styles.opcionLabel, op.label === 'Cerrar sesión' && { color: theme.red }]}>{op.label}</Text>
               <Text style={styles.opcionDesc}>{op.desc}</Text>
             </View>
             {op.label === 'Modo oscuro'
