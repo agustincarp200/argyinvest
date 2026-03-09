@@ -23,6 +23,14 @@ def get_dolar_ccl():
     except:
         return 1285
 
+def get_dolar_mep():
+    try:
+        r = requests.get("https://dolarapi.com/v1/dolares/bolsa", timeout=10)
+        data = r.json()
+        return data.get("venta", 0)
+    except:
+        return 0
+
 def get_yahoo_prices(tickers):
     precios = {}
     try:
@@ -84,6 +92,11 @@ def main():
     print(f"💱 Dólar CCL: ${ccl}")
     guardar_precios("CCL", ccl, 0, "ARS", "dolar", "dolarapi")
 
+    # Dólar MEP
+    mep = get_dolar_mep()
+    print(f"💱 Dólar MEP: ${mep}")
+    guardar_precios("MEP", mep, 0, "ARS", "dolar", "dolarapi")
+
     # Precios NYSE/NASDAQ en USD
     print("\n📊 Obteniendo precios NYSE/NASDAQ...")
     yahoo = get_yahoo_prices(NASDAQ)
@@ -99,12 +112,14 @@ def main():
     crypto = get_crypto_prices()
     for ticker, data in crypto.items():
         guardar_precios(ticker, data["precio"], data["cambio"], "USD", "crypto", "coingecko")
-# Precios BYMA
+
+    # Precios BYMA
     print("\n🇦🇷 Obteniendo precios BYMA...")
     byma = get_yahoo_prices(BYMA)
     for ticker, data in byma.items():
         ticker_limpio = ticker.replace(".BA", "")
         guardar_precios(ticker_limpio, data["precio"], data["cambio"], "ARS", "byma", "yahoo")
+
     print("\n✅ Worker finalizado!\n")
 
 if __name__ == "__main__":

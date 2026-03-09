@@ -13,6 +13,8 @@ export default function Perfil() {
   const [cantActivos, setCantActivos] = useState(0);
   const [cantOperaciones, setCantOperaciones] = useState(0);
   const [rentabilidad, setRentabilidad] = useState(0);
+  const [ccl, setCcl] = useState(0);
+  const [mep, setMep] = useState(0);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
@@ -24,20 +26,17 @@ export default function Perfil() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Fecha de registro
     const fecha = new Date(user.created_at);
     const mes = fecha.toLocaleString('es-AR', { month: 'short' });
     const anio = fecha.getFullYear();
     setMiembroDesde(`Miembro desde ${mes.charAt(0).toUpperCase() + mes.slice(1)} ${anio}`);
 
-    // Nombre e iniciales desde email
     const email = user.email ?? '';
     const nombreBase = email.split('@')[0];
     const nombre = nombreBase.charAt(0).toUpperCase() + nombreBase.slice(1);
     setNombreUsuario(nombre);
     setIniciales(nombre.slice(0, 2).toUpperCase());
 
-    // Stats reales
     const [{ data: posiciones }, { data: operaciones }, { data: precios }] = await Promise.all([
       supabase.from('posiciones').select('*').eq('usuario_id', user.id),
       supabase.from('operaciones').select('id').eq('usuario_id', user.id),
@@ -47,7 +46,11 @@ export default function Perfil() {
     setCantActivos(posiciones?.length ?? 0);
     setCantOperaciones(operaciones?.length ?? 0);
 
-    // Calcular rentabilidad real
+    const cclPrecio = precios?.find(p => p.ticker === 'CCL')?.precio ?? 0;
+    const mepPrecio = precios?.find(p => p.ticker === 'MEP')?.precio ?? 0;
+    setCcl(cclPrecio);
+    setMep(mepPrecio);
+
     if (posiciones && precios) {
       const mapaPrecios: Record<string, number> = {};
       precios.forEach(p => { mapaPrecios[p.ticker] = p.precio; });
@@ -68,6 +71,7 @@ export default function Perfil() {
 
   const opciones = [
     { icon: '🔔', label: 'Alertas de precio', desc: 'Stop Loss y Stop Gain' },
+    { icon: '💱', label: 'Tipo de cambio', desc: ccl > 0 ? `CCL $${ccl.toLocaleString('es-AR')} · MEP $${mep > 0 ? mep.toLocaleString('es-AR') : 'N/D'}` : 'Cargando...' },
     { icon: '📤', label: 'Exportar cartera', desc: 'Excel · CSV · PDF' },
     { icon: '📅', label: 'Calendario de pagos', desc: 'Dividendos y vencimientos' },
     { icon: '🌙', label: 'Modo oscuro', desc: isDark ? 'Activo' : 'Inactivo' },
