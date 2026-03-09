@@ -1,3 +1,4 @@
+import { guardarTokenPush, registrarNotificaciones } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { ThemeProvider, useTheme } from '@/lib/theme';
 import { Stack, router } from 'expo-router';
@@ -11,6 +12,11 @@ function RootLayoutInner() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
         setTimeout(() => router.replace('/login'), 100);
+      } else {
+        // Registrar notificaciones push cuando hay sesión activa
+        registrarNotificaciones().then(token => {
+          if (token) guardarTokenPush(token);
+        });
       }
     });
 
@@ -29,6 +35,7 @@ function RootLayoutInner() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="detalle" options={{ headerShown: false }} />
+        <Stack.Screen name="alertas" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </>
