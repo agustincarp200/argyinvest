@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 
 type Posicion = {
@@ -30,6 +30,7 @@ export default function Cartera() {
   const [cargando, setCargando] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [menuPos, setMenuPos] = useState<Posicion | null>(null);
 
   const [ticker, setTicker] = useState('');
   const [nombre, setNombre] = useState('');
@@ -38,17 +39,16 @@ export default function Cartera() {
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('cedear');
   const [moneda, setMoneda] = useState('ARS');
 
+  const refNombre = useRef<TextInput>(null);
+  const refCantidad = useRef<TextInput>(null);
+  const refPrecio = useRef<TextInput>(null);
+
   useEffect(() => {
     if (Platform.OS === 'android') {
-      UIManager.setLayoutAnimationEnabledExperimental?.(true);
+      if (UIManager.setLayoutAnimationEnabledExperimental) {
+        UIManager.setLayoutAnimationEnabledExperimental(true);
+      }
     }
-    const show = Keyboard.addListener('keyboardWillShow', () => {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    });
-    const hide = Keyboard.addListener('keyboardWillHide', () => {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    });
-    return () => { show.remove(); hide.remove(); };
   }, []);
 
   async function cargarDatos() {
@@ -100,6 +100,28 @@ export default function Cartera() {
     setGuardando(false);
   }
 
+  async function eliminarPosicion(pos: Posicion) {
+    setMenuPos(null);
+    Alert.alert(
+      'Eliminar posición',
+      `¿Querés eliminar ${pos.ticker} de tu cartera?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar', style: 'destructive',
+          onPress: async () => {
+            const { error } = await supabase.from('posiciones').delete().eq('id', pos.id);
+            if (error) Alert.alert('Error', error.message);
+            else {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              cargarDatos();
+            }
+          }
+        }
+      ]
+    );
+  }
+
   const getPrecioActual = (pos: Posicion) => {
     const key = pos.categoria === 'cedear' ? `${pos.ticker}.BA` : pos.ticker;
     return precios[key] ?? precios[pos.ticker] ?? pos.precio_compra;
@@ -114,7 +136,6 @@ export default function Cartera() {
   return (
     <ScrollView style={styles.container}>
 
-      {/* HEADER */}
       <View style={styles.header}>
         <View>
           <Text style={styles.saludo}>Mi Cartera 💼</Text>
@@ -131,7 +152,6 @@ export default function Cartera() {
         </View>
       ) : (
         <>
-          {/* VALOR TOTAL */}
           <View style={styles.totalContainer}>
             <Text style={styles.totalLabel}>VALOR TOTAL</Text>
             <Text style={styles.totalValor}>
@@ -145,7 +165,6 @@ export default function Cartera() {
             </View>
           </View>
 
-          {/* TARJETAS */}
           <View style={styles.tarjetasRow}>
             <View style={styles.tarjeta}>
               <Text style={styles.tarjetaLabel}>Invertido</Text>
@@ -163,8 +182,8 @@ export default function Cartera() {
             </View>
           </View>
 
-          {/* LISTA POSICIONES */}
           <Text style={styles.seccionTitulo}>Mis Posiciones</Text>
+
           {posiciones.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyTexto}>No tenés posiciones todavía</Text>
@@ -193,12 +212,15 @@ export default function Cartera() {
                       <Text style={styles.filaNombre}>{pos.nombre}</Text>
                       <Text style={styles.filaCantidad}>{pos.cantidad} u. · P.compra $ {pos.precio_compra.toLocaleString('es-AR')}</Text>
                     </View>
-                    <View style={{ alignItems: 'flex-end' }}>
+                    <View style={{ alignItems: 'flex-end', marginRight: 8 }}>
                       <Text style={styles.filaValor}>$ {valorActual.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</Text>
                       <Text style={[styles.filaGP, { color: esPositivo ? theme.green : theme.red }]}>
                         {esPositivo ? '+' : ''}{gpPct.toFixed(2)}%
                       </Text>
                     </View>
+                    <TouchableOpacity onPress={() => setMenuPos(pos)} style={styles.menuBoton}>
+                      <Text style={styles.menuPuntos}>⋯</Text>
+                    </TouchableOpacity>
                   </View>
                 );
               })}
@@ -207,17 +229,12 @@ export default function Cartera() {
         </>
       )}
 
-      {/* MODAL */}
+      {/* MODAL AGREGAR */}
       <Modal visible={modalVisible} animationType="slide" transparent>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}>
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={() => Keyboard.dismiss()}
-            style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <TouchableOpacity activeOpacity={1} onPress={() => Keyboard.dismiss()} style={styles.modalOverlay}>
             <TouchableOpacity activeOpacity={1} style={styles.modalContainer}>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitulo}>Agregar posición</Text>
                   <TouchableOpacity onPress={() => setModalVisible(false)}>
@@ -226,13 +243,17 @@ export default function Cartera() {
                 </View>
 
                 <TextInput style={styles.input} placeholder="Ticker (ej: GGAL, AAPL, BTC)" placeholderTextColor={theme.gray}
-                  value={ticker} onChangeText={t => setTicker(t.toUpperCase())} autoCapitalize="characters" />
+                  value={ticker} onChangeText={t => setTicker(t.toUpperCase())} autoCapitalize="characters"
+                  returnKeyType="next" onSubmitEditing={() => refNombre.current?.focus()} blurOnSubmit={false} />
                 <TextInput style={styles.input} placeholder="Nombre (opcional)" placeholderTextColor={theme.gray}
-                  value={nombre} onChangeText={setNombre} />
+                  value={nombre} onChangeText={setNombre}
+                  ref={refNombre} returnKeyType="next" onSubmitEditing={() => refCantidad.current?.focus()} blurOnSubmit={false} />
                 <TextInput style={styles.input} placeholder="Cantidad" placeholderTextColor={theme.gray}
-                  value={cantidad} onChangeText={setCantidad} keyboardType="numeric" />
+                  value={cantidad} onChangeText={setCantidad} keyboardType="numeric"
+                  ref={refCantidad} returnKeyType="next" onSubmitEditing={() => refPrecio.current?.focus()} blurOnSubmit={false} />
                 <TextInput style={styles.input} placeholder="Precio de compra" placeholderTextColor={theme.gray}
-                  value={precioCompra} onChangeText={setPrecioCompra} keyboardType="numeric" />
+                  value={precioCompra} onChangeText={setPrecioCompra} keyboardType="numeric"
+                  ref={refPrecio} returnKeyType="done" onSubmitEditing={() => Keyboard.dismiss()} />
 
                 <Text style={styles.inputLabel}>Categoría</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
@@ -265,6 +286,42 @@ export default function Cartera() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* MODAL MENU TRES PUNTITOS */}
+      <Modal visible={!!menuPos} animationType="fade" transparent>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuPos(null)}>
+          <View style={styles.menuContainer}>
+            <Text style={styles.menuTicker}>{menuPos?.ticker}</Text>
+            <Text style={styles.menuNombre}>{menuPos?.nombre}</Text>
+
+            <TouchableOpacity style={styles.menuOpcion} onPress={() => {
+              setMenuPos(null);
+              Alert.alert('Próximamente', 'Modificar posición estará disponible pronto');
+            }}>
+              <Text style={styles.menuOpcionIcono}>✏️</Text>
+              <Text style={styles.menuOpcionTexto}>Modificar datos</Text>
+              <Text style={styles.menuOpcionFlecha}>›</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuOpcion} onPress={() => {
+              setMenuPos(null);
+              Alert.alert('Próximamente', 'Ver rendimiento detallado estará disponible pronto');
+            }}>
+              <Text style={styles.menuOpcionIcono}>📈</Text>
+              <Text style={styles.menuOpcionTexto}>Ver rendimiento</Text>
+              <Text style={styles.menuOpcionFlecha}>›</Text>
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
+            <TouchableOpacity style={styles.menuOpcion} onPress={() => menuPos && eliminarPosicion(menuPos)}>
+              <Text style={styles.menuOpcionIcono}>🗑️</Text>
+              <Text style={[styles.menuOpcionTexto, { color: theme.red }]}>Eliminar posición</Text>
+              <Text style={styles.menuOpcionFlecha}>›</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </ScrollView>
   );
 }
@@ -291,14 +348,16 @@ const getStyles = (theme: any) => StyleSheet.create({
   emptyTexto: { color: theme.gray, fontSize: 14 },
   botonAgregarEmpty: { backgroundColor: theme.green, borderRadius: 20, paddingHorizontal: 20, paddingVertical: 10 },
   tabla: { backgroundColor: theme.card, borderRadius: 12, marginHorizontal: 20, marginBottom: 20, paddingHorizontal: 16, borderWidth: 1, borderColor: theme.border },
-  fila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.border, gap: 12 },
-  filaIcono: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  fila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.border },
+  filaIcono: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   filaIconoTexto: { fontWeight: '800', fontSize: 16 },
   filaTicker: { color: theme.white, fontWeight: '700', fontSize: 15 },
   filaNombre: { color: theme.lgray, fontSize: 11, marginTop: 1 },
   filaCantidad: { color: theme.gray, fontSize: 10, marginTop: 2 },
   filaValor: { color: theme.white, fontWeight: '700', fontSize: 14 },
   filaGP: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+  menuBoton: { padding: 8 },
+  menuPuntos: { color: theme.gray, fontSize: 20, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end' },
   modalContainer: { backgroundColor: theme.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: theme.border, maxHeight: '90%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
@@ -313,4 +372,13 @@ const getStyles = (theme: any) => StyleSheet.create({
   monedaTexto: { color: theme.lgray, fontWeight: '700' },
   botonGuardar: { backgroundColor: theme.green, borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 8 },
   botonGuardarTexto: { color: '#000', fontWeight: '800', fontSize: 15 },
+  menuOverlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'center', paddingHorizontal: 40 },
+  menuContainer: { backgroundColor: theme.card, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: theme.border },
+  menuTicker: { color: theme.white, fontSize: 18, fontWeight: '800', marginBottom: 2 },
+  menuNombre: { color: theme.gray, fontSize: 12, marginBottom: 16 },
+  menuOpcion: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 12 },
+  menuOpcionIcono: { fontSize: 20 },
+  menuOpcionTexto: { flex: 1, color: theme.white, fontSize: 15, fontWeight: '600' },
+  menuOpcionFlecha: { color: theme.gray, fontSize: 18 },
+  menuDivider: { height: 1, backgroundColor: theme.border, marginVertical: 4 },
 });
