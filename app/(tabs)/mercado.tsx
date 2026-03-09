@@ -1,7 +1,21 @@
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
+const NOMBRES: Record<string, string> = {
+  'AAPL': 'Apple', 'GOOGL': 'Alphabet', 'MSFT': 'Microsoft',
+  'AMZN': 'Amazon', 'NVDA': 'NVIDIA', 'META': 'Meta',
+  'TSLA': 'Tesla', 'AMD': 'AMD', 'BABA': 'Alibaba', 'MELI': 'MercadoLibre',
+  'GGAL.BA': 'Grupo Galicia', 'PAMP.BA': 'Pampa Energía',
+  'BMA.BA': 'Banco Macro', 'ALUA.BA': 'Aluar', 'TXAR.BA': 'Ternium',
+  'CRES.BA': 'Cresud', 'CEPU.BA': 'Central Puerto', 'LOMA.BA': 'Loma Negra',
+  'VALO.BA': 'Grupo Supervielle', 'SUPV.BA': 'Supervielle',
+  'BTC': 'Bitcoin', 'ETH': 'Ethereum', 'SOL': 'Solana',
+  'ADA': 'Cardano', 'USDT': 'Tether',
+};
+
 type Precio = {
   ticker: string;
   precio: number;
@@ -19,10 +33,7 @@ export default function Mercado() {
 
   async function cargarPrecios() {
     setCargando(true);
-    const { data, error } = await supabase
-      .from('precios_cache')
-      .select('*')
-      .order('categoria');
+    const { data } = await supabase.from('precios_cache').select('*').order('categoria');
     if (data) {
       setPrecios(data);
       setUltimaActualizacion(new Date().toLocaleTimeString('es-AR'));
@@ -40,12 +51,28 @@ export default function Mercado() {
 
   function FilaActivo({ item }: { item: Precio }) {
     const positivo = item.variacion_pct >= 0;
+
+    function irADetalle() {
+      router.push({
+        pathname: '/detalle',
+        params: {
+          ticker: item.ticker,
+          nombre: NOMBRES[item.ticker] ?? item.ticker.replace('.BA', ''),
+          precioActual: item.precio.toString(),
+          gpPct: '0',
+        }
+      });
+    }
+
     return (
-      <View style={styles.fila}>
+      <TouchableOpacity style={styles.fila} onPress={irADetalle} activeOpacity={0.7}>
         <View style={styles.filaIcono}>
           <Text style={styles.filaIconoTexto}>{item.ticker[0]}</Text>
         </View>
-        <Text style={styles.filaTicker}>{item.ticker.replace('.BA', '')}</Text>
+        <View>
+          <Text style={styles.filaTicker}>{item.ticker.replace('.BA', '')}</Text>
+          <Text style={styles.filaNombre}>{NOMBRES[item.ticker] ?? NOMBRES[item.ticker + '.BA'] ?? NOMBRES[item.ticker.replace('.BA', '')] ?? ''}</Text>
+        </View>
         <View style={{ flex: 1 }} />
         <Text style={styles.filaValor}>
           {item.moneda === 'USD' ? 'USD ' : '$ '}
@@ -56,7 +83,8 @@ export default function Mercado() {
             {positivo ? '+' : ''}{item.variacion_pct.toFixed(2)}%
           </Text>
         </View>
-      </View>
+        <Text style={styles.filaFlecha}>›</Text>
+      </TouchableOpacity>
     );
   }
 
@@ -66,7 +94,11 @@ export default function Mercado() {
       <>
         <Text style={styles.seccion}>{titulo}</Text>
         <View style={styles.tabla}>
-          {datos.map((item) => <FilaActivo key={item.ticker} item={item} />)}
+          {datos.map((item, i) => (
+            <View key={item.ticker} style={i === datos.length - 1 && { borderBottomWidth: 0 }}>
+              <FilaActivo item={item} />
+            </View>
+          ))}
         </View>
       </>
     );
@@ -118,7 +150,9 @@ const getStyles = (theme: any) => StyleSheet.create({
   filaIcono: { width: 36, height: 36, borderRadius: 10, backgroundColor: theme.card2, alignItems: 'center', justifyContent: 'center' },
   filaIconoTexto: { color: theme.lgray, fontWeight: '800', fontSize: 14 },
   filaTicker: { color: theme.white, fontWeight: '700', fontSize: 14 },
+  filaNombre: { color: theme.gray, fontSize: 10, marginTop: 1 },
   filaValor: { color: theme.white, fontSize: 13, marginRight: 8 },
   filaBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   filaCambio: { fontSize: 12, fontWeight: '700' },
+  filaFlecha: { color: theme.gray, fontSize: 18, marginLeft: 4 },
 });
