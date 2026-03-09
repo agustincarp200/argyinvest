@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 type Operacion = {
   id: string;
   ticker: string;
@@ -163,7 +163,11 @@ export default function Historial() {
 
       {/* MODAL */}
       <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+          <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitulo}>Nueva operación</Text>
@@ -215,7 +219,9 @@ export default function Historial() {
               {guardando ? <ActivityIndicator color="#000" /> : <Text style={styles.botonGuardarTexto}>Guardar operación</Text>}
             </TouchableOpacity>
           </View>
-        </View>
+          </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
     </ScrollView>
