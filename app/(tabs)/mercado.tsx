@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
+import { useTheme } from '@/lib/theme';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-
 type Precio = {
   ticker: string;
   precio: number;
@@ -11,6 +11,8 @@ type Precio = {
 };
 
 export default function Mercado() {
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
   const [precios, setPrecios] = useState<Precio[]>([]);
   const [cargando, setCargando] = useState(true);
   const [ultimaActualizacion, setUltimaActualizacion] = useState('');
@@ -101,22 +103,22 @@ export default function Mercado() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0A0A0A' },
+const getStyles = (theme: any) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.bg },
   header: { padding: 20, paddingTop: 60, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  titulo: { color: '#F5F5F5', fontSize: 22, fontWeight: '800' },
-  actualizar: { color: '#00D26A', fontSize: 13, fontWeight: '600' },
-  subtitulo: { color: '#555', fontSize: 12, paddingHorizontal: 20, marginBottom: 20 },
-  ccl: { color: '#F5C842', fontWeight: '700' },
+  titulo: { color: theme.white, fontSize: 22, fontWeight: '800' },
+  actualizar: { color: theme.green, fontSize: 13, fontWeight: '600' },
+  subtitulo: { color: theme.gray, fontSize: 12, paddingHorizontal: 20, marginBottom: 20 },
+  ccl: { color: theme.gold, fontWeight: '700' },
   loadingContainer: { alignItems: 'center', marginTop: 60, gap: 16 },
-  loadingTexto: { color: '#555', fontSize: 14 },
-  seccion: { color: '#F5F5F5', fontSize: 15, fontWeight: '700', paddingHorizontal: 20, marginBottom: 10 },
-  tabla: { backgroundColor: '#141414', borderRadius: 12, marginHorizontal: 20, marginBottom: 20, paddingHorizontal: 16, borderWidth: 1, borderColor: '#222' },
-  fila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1A1A1A', gap: 10 },
-  filaIcono: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#1A1A1A', alignItems: 'center', justifyContent: 'center' },
-  filaIconoTexto: { color: '#888', fontWeight: '800', fontSize: 14 },
-  filaTicker: { color: '#F5F5F5', fontWeight: '700', fontSize: 14 },
-  filaValor: { color: '#F5F5F5', fontSize: 13, marginRight: 8 },
+  loadingTexto: { color: theme.gray, fontSize: 14 },
+  seccion: { color: theme.white, fontSize: 15, fontWeight: '700', paddingHorizontal: 20, marginBottom: 10 },
+  tabla: { backgroundColor: theme.card, borderRadius: 12, marginHorizontal: 20, marginBottom: 20, paddingHorizontal: 16, borderWidth: 1, borderColor: theme.border },
+  fila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.border, gap: 10 },
+  filaIcono: { width: 36, height: 36, borderRadius: 10, backgroundColor: theme.card2, alignItems: 'center', justifyContent: 'center' },
+  filaIconoTexto: { color: theme.lgray, fontWeight: '800', fontSize: 14 },
+  filaTicker: { color: theme.white, fontWeight: '700', fontSize: 14 },
+  filaValor: { color: theme.white, fontSize: 13, marginRight: 8 },
   filaBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   filaCambio: { fontSize: 12, fontWeight: '700' },
 });

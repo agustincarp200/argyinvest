@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
+import { useTheme } from '@/lib/theme';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-
 type Operacion = {
   id: string;
   ticker: string;
@@ -15,6 +15,8 @@ type Operacion = {
 };
 
 export default function Historial() {
+  const { theme } = useTheme();
+  const styles = getStyles(theme);
   const [operaciones, setOperaciones] = useState<Operacion[]>([]);
   const [cargando, setCargando] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -220,45 +222,45 @@ export default function Historial() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0A0A0A' },
+const getStyles = (theme: any) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 60 },
-  titulo: { color: '#F5F5F5', fontSize: 22, fontWeight: '800' },
-  subtitulo: { color: '#555', fontSize: 12, marginTop: 2 },
-  botonAgregar: { backgroundColor: '#00D26A', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
+  titulo: { color: theme.white, fontSize: 22, fontWeight: '800' },
+  subtitulo: { color: theme.gray, fontSize: 12, marginTop: 2 },
+  botonAgregar: { backgroundColor: theme.green, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
   botonAgregarTexto: { color: '#000', fontWeight: '700', fontSize: 13 },
   tarjetasRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, marginBottom: 20 },
-  tarjeta: { flex: 1, backgroundColor: '#141414', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#222' },
-  tarjetaLabel: { color: '#555', fontSize: 10, marginBottom: 4 },
+  tarjeta: { flex: 1, backgroundColor: theme.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: theme.border },
+  tarjetaLabel: { color: theme.gray, fontSize: 10, marginBottom: 4 },
   tarjetaValor: { fontSize: 14, fontWeight: '700' },
   loadingContainer: { alignItems: 'center', marginTop: 80 },
   emptyContainer: { alignItems: 'center', marginTop: 40, gap: 16 },
-  emptyTexto: { color: '#555', fontSize: 14 },
-  botonAgregarEmpty: { backgroundColor: '#00D26A', borderRadius: 20, paddingHorizontal: 20, paddingVertical: 10 },
-  tabla: { backgroundColor: '#141414', borderRadius: 12, marginHorizontal: 20, marginBottom: 20, paddingHorizontal: 16, borderWidth: 1, borderColor: '#222' },
-  fila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#1A1A1A', gap: 12 },
+  emptyTexto: { color: theme.gray, fontSize: 14 },
+  botonAgregarEmpty: { backgroundColor: theme.green, borderRadius: 20, paddingHorizontal: 20, paddingVertical: 10 },
+  tabla: { backgroundColor: theme.card, borderRadius: 12, marginHorizontal: 20, marginBottom: 20, paddingHorizontal: 16, borderWidth: 1, borderColor: theme.border },
+  fila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.border, gap: 12 },
   filaIcono: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   filaIconoTexto: { fontWeight: '800', fontSize: 20 },
-  filaTicker: { color: '#F5F5F5', fontWeight: '700', fontSize: 15 },
-  filaDetalle: { color: '#888', fontSize: 11, marginTop: 2 },
-  filaNota: { color: '#555', fontSize: 10, marginTop: 2 },
-  filaTotal: { color: '#F5F5F5', fontWeight: '700', fontSize: 14 },
-  filaFecha: { color: '#555', fontSize: 11, marginTop: 2 },
+  filaTicker: { color: theme.white, fontWeight: '700', fontSize: 15 },
+  filaDetalle: { color: theme.lgray, fontSize: 11, marginTop: 2 },
+  filaNota: { color: theme.gray, fontSize: 10, marginTop: 2 },
+  filaTotal: { color: theme.white, fontWeight: '700', fontSize: 14 },
+  filaFecha: { color: theme.gray, fontSize: 11, marginTop: 2 },
   tipoBadge: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   tipoTexto: { fontSize: 10, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end' },
-  modalContainer: { backgroundColor: '#141414', borderRadius: 20, padding: 24, borderWidth: 1, borderColor: '#222' },
+  modalContainer: { backgroundColor: theme.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: theme.border },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitulo: { color: '#F5F5F5', fontSize: 18, fontWeight: '700' },
-  modalCerrar: { color: '#555', fontSize: 20 },
-  input: { backgroundColor: '#1A1A1A', borderRadius: 10, padding: 14, color: '#F5F5F5', fontSize: 14, marginBottom: 12, borderWidth: 1, borderColor: '#222' },
-  inputLabel: { color: '#888', fontSize: 12, marginBottom: 8 },
+  modalTitulo: { color: theme.white, fontSize: 18, fontWeight: '700' },
+  modalCerrar: { color: theme.gray, fontSize: 20 },
+  input: { backgroundColor: theme.card2, borderRadius: 10, padding: 14, color: theme.white, fontSize: 14, marginBottom: 12, borderWidth: 1, borderColor: theme.border },
+  inputLabel: { color: theme.lgray, fontSize: 12, marginBottom: 8 },
   tipoRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  tipoBoton: { flex: 1, backgroundColor: '#1A1A1A', borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#222' },
-  tipoBotonTexto: { color: '#888', fontWeight: '700' },
+  tipoBoton: { flex: 1, backgroundColor: theme.card2, borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: theme.border },
+  tipoBotonTexto: { color: theme.lgray, fontWeight: '700' },
   monedaRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  monedaBoton: { flex: 1, backgroundColor: '#1A1A1A', borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#222' },
-  monedaTexto: { color: '#888', fontWeight: '700' },
-  botonGuardar: { backgroundColor: '#00D26A', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
+  monedaBoton: { flex: 1, backgroundColor: theme.card2, borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: theme.border },
+  monedaTexto: { color: theme.lgray, fontWeight: '700' },
+  botonGuardar: { backgroundColor: theme.green, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
   botonGuardarTexto: { color: '#000', fontWeight: '800', fontSize: 15 },
 });
