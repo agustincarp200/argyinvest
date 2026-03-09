@@ -50,6 +50,13 @@ export default function Cartera() {
         UIManager.setLayoutAnimationEnabledExperimental(true);
       }
     }
+    const show = Keyboard.addListener('keyboardWillShow', () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    });
+    const hide = Keyboard.addListener('keyboardWillHide', () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    });
+    return () => { show.remove(); hide.remove(); };
   }, []);
 
   async function cargarDatos() {
