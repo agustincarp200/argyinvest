@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
+import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 
@@ -303,8 +304,18 @@ export default function Cartera() {
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.menuOpcion} onPress={() => {
+              const precioActual = getPrecioActual(menuPos!);
+              const gpPct = ((precioActual - menuPos!.precio_compra) / menuPos!.precio_compra) * 100;
               setMenuPos(null);
-              Alert.alert('Próximamente', 'Ver rendimiento detallado estará disponible pronto');
+              router.push({
+                pathname: '/detalle',
+                params: {
+                  ticker: menuPos!.ticker,
+                  nombre: menuPos!.nombre,
+                  precioActual: precioActual.toString(),
+                  gpPct: gpPct.toString(),
+                }
+              });
             }}>
               <Text style={styles.menuOpcionIcono}>📈</Text>
               <Text style={styles.menuOpcionTexto}>Ver rendimiento</Text>
