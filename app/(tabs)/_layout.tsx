@@ -1,52 +1,37 @@
+import { useTheme } from '@/lib/theme';
 import { Tabs } from 'expo-router';
-import React from 'react';
-import { Text } from 'react-native';
+
 export default function TabLayout() {
+  const { theme } = useTheme();
+
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#141414',
-          borderTopColor: '#222',
-          height: 60,
-          paddingBottom: 8,
-        },
-        tabBarActiveTintColor: '#00D26A',
-        tabBarInactiveTintColor: '#555',
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
-        },
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Cartera',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>◉</Text>,
-        }}
-      />
-      <Tabs.Screen
-        name="mercado"
-        options={{
-          title: 'Mercado',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📊</Text>,
-        }}
-      />
-      <Tabs.Screen
-        name="buscar"
-        options={{
-          title: 'Buscar',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🔍</Text>,
-        }}
-      />
-      <Tabs.Screen
-        name="perfil"
-        options={{
-          title: 'Perfil',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>👤</Text>,
-        }}
-      />
+    <Tabs screenOptions={{
+      headerShown: false,
+      tabBarStyle: {
+        backgroundColor: theme.card,
+        borderTopColor: theme.border,
+        borderTopWidth: 1,
+      },
+      tabBarActiveTintColor: theme.green,
+      tabBarInactiveTintColor: theme.gray,
+    }}>
+      <Tabs.Screen name="index" options={{ title: 'Cartera', tabBarIcon: ({ color }) => (
+        <TabIcon emoji="💼" color={color} />
+      )}} />
+      <Tabs.Screen name="mercado" options={{ title: 'Mercado', tabBarIcon: ({ color }) => (
+        <TabIcon emoji="📊" color={color} />
+      )}} />
+      <Tabs.Screen name="buscar" options={{ title: 'Historial', tabBarIcon: ({ color }) => (
+        <TabIcon emoji="📋" color={color} />
+      )}} />
+      <Tabs.Screen name="perfil" options={{ title: 'Perfil', tabBarIcon: ({ color }) => (
+        <TabIcon emoji="👤" color={color} />
+      )}} />
     </Tabs>
   );
+}
+
+function TabIcon({ emoji, color }: { emoji: string; color: string }) {
+  const { Text } = require('react-native');
+  return <Text style={{ fontSize: 20, opacity: color === '#888' ? 0.4 : 1 }}>{emoji}</Text>;
 }
