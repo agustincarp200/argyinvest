@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 type Operacion = {
   id: string;
@@ -41,6 +41,7 @@ export default function Historial() {
   const [cargando, setCargando] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [menuOp, setMenuOp] = useState<Operacion | null>(null);
 
   const [ticker, setTicker] = useState('');
   const [tipo, setTipo] = useState('COMPRA');
@@ -106,6 +107,28 @@ export default function Historial() {
       cargarOperaciones();
     }
     setGuardando(false);
+  }
+
+  async function eliminarOperacion(op: Operacion) {
+    setMenuOp(null);
+    Alert.alert(
+      'Eliminar operación',
+      `¿Querés eliminar esta operación de ${op.ticker}?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar', style: 'destructive',
+          onPress: async () => {
+            const { error } = await supabase.from('operaciones').delete().eq('id', op.id);
+            if (error) Alert.alert('Error', error.message);
+            else {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              cargarOperaciones();
+            }
+          }
+        }
+      ]
+    );
   }
 
   const totalCompras = operaciones
@@ -179,26 +202,25 @@ export default function Historial() {
                   </Text>
                   {op.notas ? <Text style={styles.filaNota}>{op.notas}</Text> : null}
                 </View>
-                <View style={{ alignItems: 'flex-end' }}>
+                <View style={{ alignItems: 'flex-end', marginRight: 8 }}>
                   <Text style={styles.filaTotal}>
                     $ {total.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
                   </Text>
                   <Text style={styles.filaFecha}>{fechaAInput(op.fecha)}</Text>
                 </View>
+                <TouchableOpacity onPress={() => setMenuOp(op)} style={styles.menuBoton}>
+                  <Text style={styles.menuPuntos}>⋯</Text>
+                </TouchableOpacity>
               </View>
             );
           })}
         </View>
       )}
 
+      {/* MODAL AGREGAR */}
       <Modal visible={modalVisible} animationType="slide" transparent>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}>
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={() => Keyboard.dismiss()}
-            style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <TouchableOpacity activeOpacity={1} onPress={() => Keyboard.dismiss()} style={styles.modalOverlay}>
             <TouchableOpacity activeOpacity={1} style={styles.modalContainer}>
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <View style={styles.modalHeader}>
@@ -264,6 +286,26 @@ export default function Historial() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* MODAL MENU TRES PUNTITOS */}
+      <Modal visible={!!menuOp} animationType="fade" transparent>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuOp(null)}>
+          <View style={styles.menuContainer}>
+            <Text style={styles.menuTicker}>{menuOp?.ticker}</Text>
+            <Text style={styles.menuSubtitulo}>
+              {menuOp?.tipo} · {menuOp?.cantidad} u. · $ {menuOp?.precio.toLocaleString('es-AR')}
+            </Text>
+
+            <View style={styles.menuDivider} />
+
+            <TouchableOpacity style={styles.menuOpcion} onPress={() => menuOp && eliminarOperacion(menuOp)}>
+              <Text style={styles.menuOpcionIcono}>🗑️</Text>
+              <Text style={[styles.menuOpcionTexto, { color: theme.red }]}>Eliminar operación</Text>
+              <Text style={styles.menuOpcionFlecha}>›</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
     </ScrollView>
   );
 }
@@ -294,6 +336,8 @@ const getStyles = (theme: any) => StyleSheet.create({
   filaFecha: { color: theme.gray, fontSize: 11, marginTop: 2 },
   tipoBadge: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   tipoTexto: { fontSize: 10, fontWeight: '700' },
+  menuBoton: { padding: 8 },
+  menuPuntos: { color: theme.gray, fontSize: 20, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end' },
   modalContainer: { backgroundColor: theme.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: theme.border, maxHeight: '90%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
@@ -309,4 +353,13 @@ const getStyles = (theme: any) => StyleSheet.create({
   monedaTexto: { color: theme.lgray, fontWeight: '700' },
   botonGuardar: { backgroundColor: theme.green, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8, marginBottom: 8 },
   botonGuardarTexto: { color: '#000', fontWeight: '800', fontSize: 15 },
+  menuOverlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'center', paddingHorizontal: 40 },
+  menuContainer: { backgroundColor: theme.card, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: theme.border },
+  menuTicker: { color: theme.white, fontSize: 18, fontWeight: '800', marginBottom: 2 },
+  menuSubtitulo: { color: theme.gray, fontSize: 12, marginBottom: 16 },
+  menuOpcion: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 12 },
+  menuOpcionIcono: { fontSize: 20 },
+  menuOpcionTexto: { flex: 1, color: theme.white, fontSize: 15, fontWeight: '600' },
+  menuOpcionFlecha: { color: theme.gray, fontSize: 18 },
+  menuDivider: { height: 1, backgroundColor: theme.border, marginVertical: 4 },
 });
