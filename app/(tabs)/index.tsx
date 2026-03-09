@@ -30,9 +30,11 @@ export default function Cartera() {
   const [precios, setPrecios] = useState<Record<string, number>>({});
   const [cargando, setCargando] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [modalEditarVisible, setModalEditarVisible] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [menuPos, setMenuPos] = useState<Posicion | null>(null);
 
+  // Agregar
   const [ticker, setTicker] = useState('');
   const [nombre, setNombre] = useState('');
   const [cantidad, setCantidad] = useState('');
@@ -40,9 +42,19 @@ export default function Cartera() {
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('cedear');
   const [moneda, setMoneda] = useState('ARS');
 
+  // Editar
+  const [editNombre, setEditNombre] = useState('');
+  const [editCantidad, setEditCantidad] = useState('');
+  const [editPrecioCompra, setEditPrecioCompra] = useState('');
+  const [editCategoria, setEditCategoria] = useState('cedear');
+  const [editMoneda, setEditMoneda] = useState('ARS');
+  const [posEditando, setPosEditando] = useState<Posicion | null>(null);
+
   const refNombre = useRef<TextInput>(null);
   const refCantidad = useRef<TextInput>(null);
   const refPrecio = useRef<TextInput>(null);
+  const refEditCantidad = useRef<TextInput>(null);
+  const refEditPrecio = useRef<TextInput>(null);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -79,6 +91,39 @@ export default function Cartera() {
   }
 
   useEffect(() => { cargarDatos(); }, []);
+
+  function abrirEditar(pos: Posicion) {
+    setPosEditando(pos);
+    setEditNombre(pos.nombre);
+    setEditCantidad(pos.cantidad.toString());
+    setEditPrecioCompra(pos.precio_compra.toString());
+    setEditCategoria(pos.categoria);
+    setEditMoneda(pos.moneda);
+    setMenuPos(null);
+    setModalEditarVisible(true);
+  }
+
+  async function guardarEdicion() {
+    if (!editCantidad || !editPrecioCompra) {
+      Alert.alert('Error', 'Completá cantidad y precio de compra');
+      return;
+    }
+    setGuardando(true);
+    const { error } = await supabase.from('posiciones').update({
+      nombre: editNombre || posEditando!.ticker,
+      cantidad: parseFloat(editCantidad),
+      precio_compra: parseFloat(editPrecioCompra),
+      categoria: editCategoria,
+      moneda: editMoneda,
+    }).eq('id', posEditando!.id);
+
+    if (error) Alert.alert('Error', error.message);
+    else {
+      setModalEditarVisible(false);
+      cargarDatos();
+    }
+    setGuardando(false);
+  }
 
   async function agregarPosicion() {
     if (!ticker || !cantidad || !precioCompra) {
@@ -294,6 +339,60 @@ export default function Cartera() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* MODAL EDITAR */}
+      <Modal visible={modalEditarVisible} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <TouchableOpacity activeOpacity={1} onPress={() => Keyboard.dismiss()} style={styles.modalOverlay}>
+            <TouchableOpacity activeOpacity={1} style={styles.modalContainer}>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitulo}>Modificar {posEditando?.ticker}</Text>
+                  <TouchableOpacity onPress={() => setModalEditarVisible(false)}>
+                    <Text style={styles.modalCerrar}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TextInput style={styles.input} placeholder="Nombre" placeholderTextColor={theme.gray}
+                  value={editNombre} onChangeText={setEditNombre}
+                  returnKeyType="next" onSubmitEditing={() => refEditCantidad.current?.focus()} blurOnSubmit={false} />
+                <TextInput style={styles.input} placeholder="Cantidad" placeholderTextColor={theme.gray}
+                  value={editCantidad} onChangeText={setEditCantidad} keyboardType="numeric"
+                  ref={refEditCantidad} returnKeyType="next" onSubmitEditing={() => refEditPrecio.current?.focus()} blurOnSubmit={false} />
+                <TextInput style={styles.input} placeholder="Precio de compra" placeholderTextColor={theme.gray}
+                  value={editPrecioCompra} onChangeText={setEditPrecioCompra} keyboardType="numeric"
+                  ref={refEditPrecio} returnKeyType="done" onSubmitEditing={() => Keyboard.dismiss()} />
+
+                <Text style={styles.inputLabel}>Categoría</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                  {CATEGORIAS.map(cat => (
+                    <TouchableOpacity key={cat.id}
+                      style={[styles.catBoton, editCategoria === cat.id && { backgroundColor: cat.color, borderColor: cat.color }]}
+                      onPress={() => setEditCategoria(cat.id)}>
+                      <Text style={[styles.catTexto, editCategoria === cat.id && { color: '#000' }]}>{cat.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                <Text style={styles.inputLabel}>Moneda</Text>
+                <View style={styles.monedaRow}>
+                  {['ARS', 'USD'].map(m => (
+                    <TouchableOpacity key={m}
+                      style={[styles.monedaBoton, editMoneda === m && { backgroundColor: theme.green, borderColor: theme.green }]}
+                      onPress={() => setEditMoneda(m)}>
+                      <Text style={[styles.monedaTexto, editMoneda === m && { color: '#000' }]}>{m}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TouchableOpacity style={styles.botonGuardar} onPress={guardarEdicion} disabled={guardando}>
+                  {guardando ? <ActivityIndicator color="#000" /> : <Text style={styles.botonGuardarTexto}>Guardar cambios</Text>}
+                </TouchableOpacity>
+              </ScrollView>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
+
       {/* MODAL MENU TRES PUNTITOS */}
       <Modal visible={!!menuPos} animationType="fade" transparent>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuPos(null)}>
@@ -301,10 +400,7 @@ export default function Cartera() {
             <Text style={styles.menuTicker}>{menuPos?.ticker}</Text>
             <Text style={styles.menuNombre}>{menuPos?.nombre}</Text>
 
-            <TouchableOpacity style={styles.menuOpcion} onPress={() => {
-              setMenuPos(null);
-              Alert.alert('Próximamente', 'Modificar posición estará disponible pronto');
-            }}>
+            <TouchableOpacity style={styles.menuOpcion} onPress={() => menuPos && abrirEditar(menuPos)}>
               <Text style={styles.menuOpcionIcono}>✏️</Text>
               <Text style={styles.menuOpcionTexto}>Modificar datos</Text>
               <Text style={styles.menuOpcionFlecha}>›</Text>
