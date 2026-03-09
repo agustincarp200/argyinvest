@@ -1,7 +1,8 @@
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
+
 type Operacion = {
   id: string;
   ticker: string;
@@ -22,7 +23,6 @@ export default function Historial() {
   const [modalVisible, setModalVisible] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
-  // Form
   const [ticker, setTicker] = useState('');
   const [tipo, setTipo] = useState('COMPRA');
   const [cantidad, setCantidad] = useState('');
@@ -30,6 +30,19 @@ export default function Historial() {
   const [comision, setComision] = useState('0');
   const [moneda, setMoneda] = useState('ARS');
   const [notas, setNotas] = useState('');
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      UIManager.setLayoutAnimationEnabledExperimental?.(true);
+    }
+    const show = Keyboard.addListener('keyboardWillShow', () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    });
+    const hide = Keyboard.addListener('keyboardWillHide', () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   async function cargarOperaciones() {
     setCargando(true);
@@ -102,13 +115,13 @@ export default function Historial() {
       <View style={styles.tarjetasRow}>
         <View style={styles.tarjeta}>
           <Text style={styles.tarjetaLabel}>Total comprado</Text>
-          <Text style={[styles.tarjetaValor, { color: '#00D26A' }]}>
+          <Text style={[styles.tarjetaValor, { color: theme.green }]}>
             $ {totalCompras.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
           </Text>
         </View>
         <View style={styles.tarjeta}>
           <Text style={styles.tarjetaLabel}>Total vendido</Text>
-          <Text style={[styles.tarjetaValor, { color: '#FF4D4D' }]}>
+          <Text style={[styles.tarjetaValor, { color: theme.red }]}>
             $ {totalVentas.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
           </Text>
         </View>
@@ -116,7 +129,7 @@ export default function Historial() {
 
       {cargando ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00D26A" />
+          <ActivityIndicator size="large" color={theme.green} />
         </View>
       ) : operaciones.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -163,64 +176,65 @@ export default function Historial() {
 
       {/* MODAL */}
       <Modal visible={modalVisible} animationType="slide" transparent>
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}>
-          <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitulo}>Nueva operación</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Text style={styles.modalCerrar}>✕</Text>
-              </TouchableOpacity>
-            </View>
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => Keyboard.dismiss()}
+            style={styles.modalOverlay}>
+            <TouchableOpacity activeOpacity={1} style={styles.modalContainer}>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitulo}>Nueva operación</Text>
+                  <TouchableOpacity onPress={() => setModalVisible(false)}>
+                    <Text style={styles.modalCerrar}>✕</Text>
+                  </TouchableOpacity>
+                </View>
 
-            <TextInput style={styles.input} placeholder="Ticker (ej: GGAL, AAPL)" placeholderTextColor="#555"
-              value={ticker} onChangeText={t => setTicker(t.toUpperCase())} autoCapitalize="characters" />
+                <TextInput style={styles.input} placeholder="Ticker (ej: GGAL, AAPL)" placeholderTextColor={theme.gray}
+                  value={ticker} onChangeText={t => setTicker(t.toUpperCase())} autoCapitalize="characters" />
 
-            {/* Tipo */}
-            <Text style={styles.inputLabel}>Tipo de operación</Text>
-            <View style={styles.tipoRow}>
-              {['COMPRA', 'VENTA'].map(t => (
-                <TouchableOpacity key={t}
-                  style={[styles.tipoBoton,
-                    tipo === t && { backgroundColor: t === 'COMPRA' ? '#00D26A' : '#FF4D4D',
-                    borderColor: t === 'COMPRA' ? '#00D26A' : '#FF4D4D' }]}
-                  onPress={() => setTipo(t)}>
-                  <Text style={[styles.tipoBotonTexto, tipo === t && { color: '#000' }]}>{t}</Text>
+                <Text style={styles.inputLabel}>Tipo de operación</Text>
+                <View style={styles.tipoRow}>
+                  {['COMPRA', 'VENTA'].map(t => (
+                    <TouchableOpacity key={t}
+                      style={[styles.tipoBoton,
+                        tipo === t && { backgroundColor: t === 'COMPRA' ? '#00D26A' : '#FF4D4D',
+                        borderColor: t === 'COMPRA' ? '#00D26A' : '#FF4D4D' }]}
+                      onPress={() => setTipo(t)}>
+                      <Text style={[styles.tipoBotonTexto, tipo === t && { color: '#000' }]}>{t}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TextInput style={styles.input} placeholder="Cantidad" placeholderTextColor={theme.gray}
+                  value={cantidad} onChangeText={setCantidad} keyboardType="numeric" />
+                <TextInput style={styles.input} placeholder="Precio unitario" placeholderTextColor={theme.gray}
+                  value={precio} onChangeText={setPrecio} keyboardType="numeric" />
+                <TextInput style={styles.input} placeholder="Comisión (opcional)" placeholderTextColor={theme.gray}
+                  value={comision} onChangeText={setComision} keyboardType="numeric" />
+
+                <Text style={styles.inputLabel}>Moneda</Text>
+                <View style={styles.monedaRow}>
+                  {['ARS', 'USD'].map(m => (
+                    <TouchableOpacity key={m}
+                      style={[styles.monedaBoton, moneda === m && { backgroundColor: theme.green, borderColor: theme.green }]}
+                      onPress={() => setMoneda(m)}>
+                      <Text style={[styles.monedaTexto, moneda === m && { color: '#000' }]}>{m}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <TextInput style={styles.input} placeholder="Notas (opcional)" placeholderTextColor={theme.gray}
+                  value={notas} onChangeText={setNotas} />
+
+                <TouchableOpacity style={styles.botonGuardar} onPress={agregarOperacion} disabled={guardando}>
+                  {guardando ? <ActivityIndicator color="#000" /> : <Text style={styles.botonGuardarTexto}>Guardar operación</Text>}
                 </TouchableOpacity>
-              ))}
-            </View>
-
-            <TextInput style={styles.input} placeholder="Cantidad" placeholderTextColor="#555"
-              value={cantidad} onChangeText={setCantidad} keyboardType="numeric" />
-            <TextInput style={styles.input} placeholder="Precio unitario" placeholderTextColor="#555"
-              value={precio} onChangeText={setPrecio} keyboardType="numeric" />
-            <TextInput style={styles.input} placeholder="Comisión (opcional)" placeholderTextColor="#555"
-              value={comision} onChangeText={setComision} keyboardType="numeric" />
-
-            {/* Moneda */}
-            <Text style={styles.inputLabel}>Moneda</Text>
-            <View style={styles.monedaRow}>
-              {['ARS', 'USD'].map(m => (
-                <TouchableOpacity key={m}
-                  style={[styles.monedaBoton, moneda === m && { backgroundColor: '#00D26A', borderColor: '#00D26A' }]}
-                  onPress={() => setMoneda(m)}>
-                  <Text style={[styles.monedaTexto, moneda === m && { color: '#000' }]}>{m}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TextInput style={styles.input} placeholder="Notas (opcional)" placeholderTextColor="#555"
-              value={notas} onChangeText={setNotas} />
-
-            <TouchableOpacity style={styles.botonGuardar} onPress={agregarOperacion} disabled={guardando}>
-              {guardando ? <ActivityIndicator color="#000" /> : <Text style={styles.botonGuardarTexto}>Guardar operación</Text>}
+              </ScrollView>
             </TouchableOpacity>
-          </View>
-          </View>
-          </ScrollView>
+          </TouchableOpacity>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -255,7 +269,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   tipoBadge: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   tipoTexto: { fontSize: 10, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end' },
-  modalContainer: { backgroundColor: theme.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: theme.border },
+  modalContainer: { backgroundColor: theme.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: theme.border, maxHeight: '90%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitulo: { color: theme.white, fontSize: 18, fontWeight: '700' },
   modalCerrar: { color: theme.gray, fontSize: 20 },
@@ -267,6 +281,6 @@ const getStyles = (theme: any) => StyleSheet.create({
   monedaRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   monedaBoton: { flex: 1, backgroundColor: theme.card2, borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: theme.border },
   monedaTexto: { color: theme.lgray, fontWeight: '700' },
-  botonGuardar: { backgroundColor: theme.green, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
+  botonGuardar: { backgroundColor: theme.green, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8, marginBottom: 8 },
   botonGuardarTexto: { color: '#000', fontWeight: '800', fontSize: 15 },
 });
