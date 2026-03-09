@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -19,13 +20,15 @@ export default function Login() {
 
     if (esRegistro) {
       const { data, error: err } = await supabase.auth.signUp({ email, password });
-      if (err) setError(err.message);
-      else if (data.user) {
+      if (err) { setError(err.message); setCargando(false); return; }
+      if (data.user) {
         await supabase.from('usuarios').insert({ id: data.user.id, nombre: email.split('@')[0], plan: 'free' });
+        router.replace('/(tabs)');
       }
     } else {
       const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-      if (err) setError('Email o contraseña incorrectos');
+      if (err) { setError('Email o contraseña incorrectos'); setCargando(false); return; }
+      router.replace('/(tabs)');
     }
     setCargando(false);
   }
