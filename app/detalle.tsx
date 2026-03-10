@@ -2,7 +2,7 @@ import { useTheme } from '@/lib/theme';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Path, Svg } from 'react-native-svg';
+import { Line, Path, Svg, Text as SvgText } from 'react-native-svg';
 
 const PERIODOS = [
   { label: '1D', range: '1d', interval: '5m' },
@@ -14,38 +14,91 @@ const PERIODOS = [
 ];
 
 const WIDTH = Dimensions.get('window').width - 40;
-const HEIGHT = 200;
+const SVG_H = 250;
+const PAD = { top: 10, right: 10, bottom: 30, left: 58 };
+const CHART_W = WIDTH - PAD.left - PAD.right;
+const CHART_H = SVG_H - PAD.top - PAD.bottom;
 
-function construirPath(datos: { x: number; y: number }[]): { linea: string; area: string } | null {
+function GraficoConEjes({
+  datos, timestamps, color, formatY
+}: {
+  datos: { x: number; y: number }[];
+  timestamps: number[];
+  color: string;
+  formatY: (v: number) => string;
+}) {
   if (datos.length < 2) return null;
+
   const minY = Math.min(...datos.map(d => d.y));
   const maxY = Math.max(...datos.map(d => d.y));
   const rangoY = maxY - minY || 1;
   const rangoX = datos.length - 1;
 
   const puntos = datos.map((d, i) => {
-    const px = (i / rangoX) * WIDTH;
-    const py = HEIGHT - ((d.y - minY) / rangoY) * HEIGHT;
-    return `${i === 0 ? 'M' : 'L'}${px.toFixed(2)},${py.toFixed(2)}`;
+    const px = PAD.left + (i / rangoX) * CHART_W;
+    const py = PAD.top + CHART_H - ((d.y - minY) / rangoY) * CHART_H;
+    return { px, py, str: `${i === 0 ? 'M' : 'L'}${px.toFixed(2)},${py.toFixed(2)}` };
   });
 
-  const area = [...puntos, `L${WIDTH},${HEIGHT}`, `L0,${HEIGHT}`, 'Z'].join(' ');
+  const linea = puntos.map(p => p.str).join(' ');
+  const first = puntos[0];
+  const last = puntos[puntos.length - 1];
+  const area = `${linea} L${last.px.toFixed(2)},${(PAD.top + CHART_H).toFixed(2)} L${first.px.toFixed(2)},${(PAD.top + CHART_H).toFixed(2)} Z`;
 
-  return { linea: puntos.join(' '), area };
+  const yLabels = [0, 1, 2, 3].map(i => ({
+    val: minY + (rangoY * i) / 3,
+    py: PAD.top + CHART_H - (i / 3) * CHART_H,
+  }));
+
+  const xLabels = [0, 1, 2, 3].map(i => {
+    const idx = Math.round((i / 3) * (datos.length - 1));
+    const ts = timestamps[idx];
+    const date = ts ? new Date(ts * 1000) : null;
+    const label = date
+      ? date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }).replace('.', '')
+      : '';
+    return { label, px: PAD.left + (idx / rangoX) * CHART_W };
+  });
+
+  return (
+    <Svg width={WIDTH} height={SVG_H}>
+      {yLabels.map((yl, i) => (
+        <Line key={`gl${i}`}
+          x1={PAD.left} y1={yl.py}
+          x2={PAD.left + CHART_W} y2={yl.py}
+          stroke="#33333388" strokeWidth={0.5} strokeDasharray="4,4"
+        />
+      ))}
+      <Path d={area} fill={color} fillOpacity={0.08} />
+      <Path d={linea} stroke={color} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+      {yLabels.map((yl, i) => (
+        <SvgText key={`yl${i}`}
+          x={PAD.left - 4} y={yl.py + 4}
+          fontSize={9} fill="#888" textAnchor="end">
+          {formatY(yl.val)}
+        </SvgText>
+      ))}
+      {xLabels.map((xl, i) => (
+        <SvgText key={`xl${i}`}
+          x={xl.px} y={SVG_H - 6}
+          fontSize={9} fill="#888" textAnchor="middle">
+          {xl.label}
+        </SvgText>
+      ))}
+    </Svg>
+  );
 }
 
 export default function Detalle() {
   const { theme } = useTheme();
   const styles = getStyles(theme);
   const { ticker, nombre, precioActual, gpPct } = useLocalSearchParams<{
-    ticker: string;
-    nombre: string;
-    precioActual: string;
-    gpPct: string;
+    ticker: string; nombre: string; precioActual: string; gpPct: string;
   }>();
 
   const [periodo, setPeriodo] = useState(PERIODOS[2]);
   const [datos, setDatos] = useState<{ x: number; y: number }[]>([]);
+  const [timestamps, setTimestamps] = useState<number[]>([]);
   const [cargando, setCargando] = useState(true);
   const [precioInicio, setPrecioInicio] = useState(0);
   const [precioFin, setPrecioFin] = useState(0);
@@ -57,20 +110,25 @@ export default function Detalle() {
       const res = await fetch(url);
       const json = await res.json();
       const result = json?.chart?.result?.[0];
-      const timestamps = result?.timestamp ?? [];
+      const ts = result?.timestamp ?? [];
       const closes = result?.indicators?.quote?.[0]?.close ?? [];
 
-      const puntos = timestamps
-        .map((t: number, i: number) => ({ x: i, y: closes[i] }))
+      const combined = ts
+        .map((t: number, i: number) => ({ ts: t, y: closes[i] }))
         .filter((p: any) => p.y !== null && p.y !== undefined && !isNaN(p.y));
 
+      const puntos = combined.map((p: any, i: number) => ({ x: i, y: p.y }));
+      const tsLimpio = combined.map((p: any) => p.ts);
+
       setDatos(puntos);
+      setTimestamps(tsLimpio);
       if (puntos.length > 0) {
         setPrecioInicio(puntos[0].y);
         setPrecioFin(puntos[puntos.length - 1].y);
       }
     } catch (e) {
       setDatos([]);
+      setTimestamps([]);
     }
     setCargando(false);
   }
@@ -80,19 +138,21 @@ export default function Detalle() {
   const variacion = precioInicio > 0 ? ((precioFin - precioInicio) / precioInicio) * 100 : 0;
   const esPositivo = variacion >= 0;
   const colorLinea = esPositivo ? theme.green : theme.red;
-  const paths = construirPath(datos);
+
+  function formatY(v: number): string {
+    if (v >= 1000000) return `$${(v / 1000000).toFixed(1)}M`;
+    if (v >= 1000) return `$${(v / 1000).toFixed(0)}k`;
+    return `$${v.toFixed(0)}`;
+  }
 
   return (
     <ScrollView style={styles.container}>
-
-      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBoton}>
           <Text style={styles.backTexto}>‹ Volver</Text>
         </TouchableOpacity>
       </View>
 
-      {/* INFO ACTIVO */}
       <View style={styles.infoContainer}>
         <Text style={styles.ticker}>{ticker}</Text>
         <Text style={styles.nombre}>{nombre}</Text>
@@ -104,44 +164,33 @@ export default function Detalle() {
             {esPositivo ? '+' : ''}{variacion.toFixed(2)}% en el período
           </Text>
         </View>
-        {gpPct && (
+        {gpPct && parseFloat(gpPct) !== 0 && (
           <Text style={[styles.gpTexto, { color: parseFloat(gpPct) >= 0 ? theme.green : theme.red }]}>
             Mi G/P: {parseFloat(gpPct) >= 0 ? '+' : ''}{parseFloat(gpPct).toFixed(2)}%
           </Text>
         )}
       </View>
 
-      {/* GRAFICO */}
       <View style={styles.graficoContainer}>
         {cargando ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.green} />
             <Text style={styles.loadingTexto}>Cargando datos...</Text>
           </View>
-        ) : !paths ? (
+        ) : datos.length < 2 ? (
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingTexto}>No hay datos disponibles</Text>
           </View>
         ) : (
-          <Svg width={WIDTH} height={HEIGHT}>
-            <Path
-              d={paths.area}
-              fill={colorLinea}
-              fillOpacity={0.08}
-            />
-            <Path
-              d={paths.linea}
-              stroke={colorLinea}
-              strokeWidth={2}
-              fill="none"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-          </Svg>
+          <GraficoConEjes
+            datos={datos}
+            timestamps={timestamps}
+            color={colorLinea}
+            formatY={formatY}
+          />
         )}
       </View>
 
-      {/* SELECTOR DE PERIODO */}
       <View style={styles.periodosContainer}>
         {PERIODOS.map(p => (
           <TouchableOpacity
@@ -155,7 +204,6 @@ export default function Detalle() {
         ))}
       </View>
 
-      {/* STATS */}
       <View style={styles.statsContainer}>
         <View style={styles.statFila}>
           <Text style={styles.statLabel}>Precio inicio período</Text>
@@ -172,7 +220,6 @@ export default function Detalle() {
           </Text>
         </View>
       </View>
-
     </ScrollView>
   );
 }
@@ -189,8 +236,8 @@ const getStyles = (theme: any) => StyleSheet.create({
   variacionBadge: { alignSelf: 'flex-start', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4, marginTop: 8 },
   variacionTexto: { fontSize: 13, fontWeight: '700' },
   gpTexto: { fontSize: 13, fontWeight: '600', marginTop: 8 },
-  graficoContainer: { marginHorizontal: 20, backgroundColor: theme.card, borderRadius: 16, borderWidth: 1, borderColor: theme.border, paddingVertical: 16, marginBottom: 8, alignItems: 'center' },
-  loadingContainer: { height: 200, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  graficoContainer: { marginHorizontal: 20, backgroundColor: theme.card, borderRadius: 16, borderWidth: 1, borderColor: theme.border, paddingVertical: 8, marginBottom: 8, alignItems: 'center' },
+  loadingContainer: { height: 250, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingTexto: { color: theme.gray, fontSize: 13 },
   periodosContainer: { flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 20, marginTop: 8, marginBottom: 20, backgroundColor: theme.card, borderRadius: 12, padding: 4, borderWidth: 1, borderColor: theme.border },
   periodoBoton: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 10 },

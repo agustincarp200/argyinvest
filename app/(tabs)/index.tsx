@@ -34,7 +34,6 @@ export default function Cartera() {
   const [guardando, setGuardando] = useState(false);
   const [menuPos, setMenuPos] = useState<Posicion | null>(null);
 
-  // Agregar
   const [ticker, setTicker] = useState('');
   const [nombre, setNombre] = useState('');
   const [cantidad, setCantidad] = useState('');
@@ -42,7 +41,6 @@ export default function Cartera() {
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('cedear');
   const [moneda, setMoneda] = useState('ARS');
 
-  // Editar
   const [editNombre, setEditNombre] = useState('');
   const [editCantidad, setEditCantidad] = useState('');
   const [editPrecioCompra, setEditPrecioCompra] = useState('');
@@ -192,7 +190,7 @@ export default function Cartera() {
       <View style={styles.header}>
         <View>
           <Text style={styles.saludo}>Mi Cartera 💼</Text>
-          <Text style={styles.appNombre}>ArgylnVest</Text>
+          <Text style={styles.appNombre}>A Contar</Text>
         </View>
         <TouchableOpacity style={styles.botonAgregar} onPress={() => setModalVisible(true)}>
           <Text style={styles.botonAgregarTexto}>+ Agregar</Text>
@@ -216,6 +214,9 @@ export default function Cartera() {
                 {'  '}({positivo ? '+' : ''}$ {Math.abs(ganancia).toLocaleString('es-AR', { maximumFractionDigits: 0 })})
               </Text>
             </View>
+            <TouchableOpacity style={styles.verRendimientoBoton} onPress={() => router.push('/rendimiento')}>
+              <Text style={styles.verRendimientoTexto}>Ver rendimiento →</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.tarjetasRow}>
@@ -453,6 +454,8 @@ const getStyles = (theme: any) => StyleSheet.create({
   totalValor: { color: theme.white, fontSize: 36, fontWeight: '800', marginTop: 6 },
   variacionBadge: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 5, marginTop: 8 },
   variacionTexto: { fontSize: 13, fontWeight: '700' },
+  verRendimientoBoton: { marginTop: 12, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: theme.green + '55' },
+  verRendimientoTexto: { color: theme.green, fontSize: 13, fontWeight: '600' },
   tarjetasRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, marginBottom: 24 },
   tarjeta: { flex: 1, backgroundColor: theme.card, borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: theme.border },
   tarjetaLabel: { color: theme.gray, fontSize: 10 },

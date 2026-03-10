@@ -36,6 +36,7 @@ function RootLayoutInner() {
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="detalle" options={{ headerShown: false }} />
         <Stack.Screen name="alertas" options={{ headerShown: false }} />
+        <Stack.Screen name="rendimiento" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </>

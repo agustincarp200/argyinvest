@@ -34,8 +34,13 @@ export async function registrarNotificaciones(): Promise<string | null> {
     });
   }
 
-  const token = await Notifications.getExpoPushTokenAsync();
-  return token.data;
+  try {
+    const token = await Notifications.getExpoPushTokenAsync();
+    return token.data;
+  } catch (e) {
+    console.log('Push token no disponible en desarrollo');
+    return null;
+  }
 }
 
 export async function guardarTokenPush(token: string) {
