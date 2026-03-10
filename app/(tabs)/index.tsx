@@ -27,6 +27,9 @@ const CATEGORIAS = [
   { id: 'fci', label: 'FCI', color: '#22D3EE' },
 ];
 
+const CATS_USD = ['nasdaq', 'crypto', 'bono_usd'];
+const CATS_ARS = ['byma', 'bono_ars', 'letra', 'fci', 'on'];
+
 export default function Cartera() {
   const { theme } = useTheme();
   const styles = getStyles(theme);
@@ -37,6 +40,7 @@ export default function Cartera() {
   const [modalEditarVisible, setModalEditarVisible] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [menuPos, setMenuPos] = useState<Posicion | null>(null);
+  const [modoMoneda, setModoMoneda] = useState<'ARS' | 'USD'>('ARS');
 
   const [ticker, setTicker] = useState('');
   const [nombre, setNombre] = useState('');
@@ -199,8 +203,35 @@ export default function Cartera() {
     return precios[key] ?? precios[pos.ticker] ?? pos.precio_compra;
   };
 
-  const totalInvertido = posiciones.reduce((s, p) => s + p.cantidad * p.precio_compra, 0);
-  const totalActual = posiciones.reduce((s, p) => s + p.cantidad * getPrecioActual(p), 0);
+  // ── TERMÓMETRO MONEDA DUAL ──────────────────────────
+  const ccl = precios['CCL'] ?? 1285;
+
+  const convertir = (valor: number, categoria: string): number => {
+    if (modoMoneda === 'USD') {
+      if (CATS_ARS.includes(categoria)) return valor / ccl;
+      if (categoria === 'cedear') return valor / ccl;
+      return valor; // nasdaq/crypto ya están en USD
+    } else {
+      if (CATS_USD.includes(categoria)) return valor * ccl;
+      return valor; // byma/cedear/bonos ARS ya están en ARS
+    }
+  };
+
+  const formatVal = (valor: number): string =>
+    modoMoneda === 'ARS'
+      ? `$ ${valor.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`
+      : `u$s ${valor.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const etiquetaOriginal = (categoria: string): string | null => {
+    if (modoMoneda === 'USD' && [...CATS_ARS, 'cedear'].includes(categoria)) return 'ARS';
+    if (modoMoneda === 'ARS' && CATS_USD.includes(categoria)) return 'USD';
+    return null;
+  };
+
+  const totalInvertido = posiciones.reduce((s, p) =>
+    s + p.cantidad * convertir(p.precio_compra, p.categoria), 0);
+  const totalActual = posiciones.reduce((s, p) =>
+    s + p.cantidad * convertir(getPrecioActual(p), p.categoria), 0);
   const ganancia = totalActual - totalInvertido;
   const gananciaPct = totalInvertido > 0 ? (ganancia / totalInvertido) * 100 : 0;
   const positivo = ganancia >= 0;
@@ -213,9 +244,23 @@ export default function Cartera() {
           <Text style={styles.saludo}>Mi Cartera 💼</Text>
           <Text style={styles.appNombre}>A Contar</Text>
         </View>
-        <TouchableOpacity style={styles.botonAgregar} onPress={() => setModalVisible(true)}>
-          <Text style={styles.botonAgregarTexto}>+ Agregar</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <View style={styles.toggleMoneda}>
+            <TouchableOpacity
+              style={[styles.toggleBtn, modoMoneda === 'ARS' && { backgroundColor: theme.gold }]}
+              onPress={() => setModoMoneda('ARS')}>
+              <Text style={[styles.toggleBtnTexto, modoMoneda === 'ARS' && { color: '#000' }]}>ARS</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleBtn, modoMoneda === 'USD' && { backgroundColor: theme.green }]}
+              onPress={() => setModoMoneda('USD')}>
+              <Text style={[styles.toggleBtnTexto, modoMoneda === 'USD' && { color: '#000' }]}>USD</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity style={styles.botonAgregar} onPress={() => setModalVisible(true)}>
+            <Text style={styles.botonAgregarTexto}>+ Agregar</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {cargando ? (
@@ -225,16 +270,17 @@ export default function Cartera() {
       ) : (
         <>
           <View style={styles.totalContainer}>
-            <Text style={styles.totalLabel}>VALOR TOTAL</Text>
-            <Text style={styles.totalValor}>
-              $ {totalActual.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
-            </Text>
+            <Text style={styles.totalLabel}>VALOR TOTAL · {modoMoneda}</Text>
+            <Text style={styles.totalValor}>{formatVal(totalActual)}</Text>
             <View style={[styles.variacionBadge, { backgroundColor: positivo ? theme.greenDim : theme.redDim }]}>
               <Text style={[styles.variacionTexto, { color: positivo ? theme.green : theme.red }]}>
                 {positivo ? '+' : ''}{gananciaPct.toFixed(2)}%
-                {'  '}({positivo ? '+' : ''}$ {Math.abs(ganancia).toLocaleString('es-AR', { maximumFractionDigits: 0 })})
+                {'  '}({positivo ? '+' : ''}{formatVal(Math.abs(ganancia))})
               </Text>
             </View>
+            {modoMoneda === 'USD' && (
+              <Text style={styles.cclTexto}>CCL: ${ccl.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</Text>
+            )}
             <TouchableOpacity style={styles.verRendimientoBoton} onPress={() => router.push('/rendimiento')}>
               <Text style={styles.verRendimientoTexto}>Ver rendimiento →</Text>
             </TouchableOpacity>
@@ -243,16 +289,16 @@ export default function Cartera() {
           <View style={styles.tarjetasRow}>
             <View style={styles.tarjeta}>
               <Text style={styles.tarjetaLabel}>Invertido</Text>
-              <Text style={styles.tarjetaValor}>$ {totalInvertido.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</Text>
+              <Text style={styles.tarjetaValor} numberOfLines={1}>{formatVal(totalInvertido)}</Text>
             </View>
             <View style={styles.tarjeta}>
               <Text style={styles.tarjetaLabel}>Activos</Text>
               <Text style={[styles.tarjetaValor, { color: theme.blue }]}>{posiciones.length}</Text>
             </View>
             <View style={styles.tarjeta}>
-              <Text style={styles.tarjetaLabel}>G/P $</Text>
-              <Text style={[styles.tarjetaValor, { color: positivo ? theme.green : theme.red }]}>
-                {positivo ? '+' : ''}$ {Math.abs(ganancia).toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+              <Text style={styles.tarjetaLabel}>G/P</Text>
+              <Text style={[styles.tarjetaValor, { color: positivo ? theme.green : theme.red }]} numberOfLines={1}>
+                {positivo ? '+' : ''}{formatVal(Math.abs(ganancia))}
               </Text>
             </View>
           </View>
@@ -270,11 +316,14 @@ export default function Cartera() {
             <View style={styles.tabla}>
               {posiciones.map((pos, i) => {
                 const precioActual = getPrecioActual(pos);
-                const valorActual = pos.cantidad * precioActual;
-                const gp = valorActual - pos.cantidad * pos.precio_compra;
+                const precioConv = convertir(precioActual, pos.categoria);
+                const precioCompraConv = convertir(pos.precio_compra, pos.categoria);
+                const valorActual = pos.cantidad * precioConv;
+                const gp = valorActual - pos.cantidad * precioCompraConv;
                 const gpPct = ((precioActual - pos.precio_compra) / pos.precio_compra) * 100;
                 const esPositivo = gp >= 0;
                 const cat = CATEGORIAS.find(c => c.id === pos.categoria);
+                const etiq = etiquetaOriginal(pos.categoria);
                 return (
                   <View key={pos.id} style={[styles.fila, i === posiciones.length - 1 && { borderBottomWidth: 0 }]}>
                     <View style={[styles.filaIcono, { backgroundColor: (cat?.color ?? theme.green) + '22' }]}>
@@ -288,10 +337,13 @@ export default function Cartera() {
                       <Text style={styles.filaCantidad}>{pos.cantidad} u. · P.compra $ {pos.precio_compra.toLocaleString('es-AR')}</Text>
                     </View>
                     <View style={{ alignItems: 'flex-end', marginRight: 8 }}>
-                      <Text style={styles.filaValor}>$ {valorActual.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</Text>
+                      <Text style={styles.filaValor}>{formatVal(valorActual)}</Text>
                       <Text style={[styles.filaGP, { color: esPositivo ? theme.green : theme.red }]}>
                         {esPositivo ? '+' : ''}{gpPct.toFixed(2)}%
                       </Text>
+                      {etiq && (
+                        <Text style={styles.etiqOriginal}>orig. {etiq}</Text>
+                      )}
                     </View>
                     <TouchableOpacity onPress={() => setMenuPos(pos)} style={styles.menuBoton}>
                       <Text style={styles.menuPuntos}>⋯</Text>
@@ -505,12 +557,16 @@ const getStyles = (theme: any) => StyleSheet.create({
   appNombre: { color: theme.white, fontSize: 18, fontWeight: 'bold', marginTop: 2 },
   botonAgregar: { backgroundColor: theme.green, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
   botonAgregarTexto: { color: '#000', fontWeight: '700', fontSize: 13 },
+  toggleMoneda: { flexDirection: 'row', backgroundColor: theme.card, borderRadius: 20, borderWidth: 1, borderColor: theme.border, overflow: 'hidden' },
+  toggleBtn: { paddingHorizontal: 12, paddingVertical: 7 },
+  toggleBtnTexto: { fontSize: 12, fontWeight: '800', color: theme.gray },
   loadingContainer: { alignItems: 'center', marginTop: 80 },
   totalContainer: { alignItems: 'center', paddingVertical: 20 },
   totalLabel: { color: theme.gray, fontSize: 11, letterSpacing: 1 },
   totalValor: { color: theme.white, fontSize: 36, fontWeight: '800', marginTop: 6 },
   variacionBadge: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 5, marginTop: 8 },
   variacionTexto: { fontSize: 13, fontWeight: '700' },
+  cclTexto: { color: theme.gray, fontSize: 11, marginTop: 6 },
   verRendimientoBoton: { marginTop: 12, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: theme.green + '55' },
   verRendimientoTexto: { color: theme.green, fontSize: 13, fontWeight: '600' },
   tarjetasRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, marginBottom: 24 },
@@ -530,6 +586,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   filaCantidad: { color: theme.gray, fontSize: 10, marginTop: 2 },
   filaValor: { color: theme.white, fontWeight: '700', fontSize: 14 },
   filaGP: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+  etiqOriginal: { color: theme.gray, fontSize: 9, marginTop: 1 },
   menuBoton: { padding: 8 },
   menuPuntos: { color: theme.gray, fontSize: 20, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end' },
