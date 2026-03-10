@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
+import { buscarTickers, COLORES_CATEGORIA, type TickerSugerido } from '@/lib/tickers';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
@@ -19,7 +20,10 @@ const CATEGORIAS = [
   { id: 'byma', label: 'BYMA', color: '#4D9EFF' },
   { id: 'nasdaq', label: 'NYSE/NASDAQ', color: '#A855F7' },
   { id: 'crypto', label: 'Crypto', color: '#F59E0B' },
-  { id: 'bono', label: 'Bono', color: '#FF9D4D' },
+  { id: 'bono_ars', label: 'Bono ARS', color: '#FF9D4D' },
+  { id: 'bono_usd', label: 'Bono USD', color: '#FF6B35' },
+  { id: 'letra', label: 'Letra', color: '#00C9A7' },
+  { id: 'on', label: 'ON', color: '#C084FC' },
   { id: 'fci', label: 'FCI', color: '#22D3EE' },
 ];
 
@@ -40,6 +44,7 @@ export default function Cartera() {
   const [precioCompra, setPrecioCompra] = useState('');
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('cedear');
   const [moneda, setMoneda] = useState('ARS');
+  const [sugerencias, setSugerencias] = useState<TickerSugerido[]>([]);
 
   const [editNombre, setEditNombre] = useState('');
   const [editCantidad, setEditCantidad] = useState('');
@@ -89,6 +94,21 @@ export default function Cartera() {
   }
 
   useEffect(() => { cargarDatos(); }, []);
+
+  function onChangeTicker(t: string) {
+    const val = t.toUpperCase();
+    setTicker(val);
+    setSugerencias(buscarTickers(val));
+  }
+
+  function seleccionarSugerencia(s: TickerSugerido) {
+    setTicker(s.ticker);
+    setNombre(s.nombre);
+    setCategoriaSeleccionada(s.categoria);
+    setMoneda(s.moneda);
+    setSugerencias([]);
+    Keyboard.dismiss();
+  }
 
   function abrirEditar(pos: Posicion) {
     setPosEditando(pos);
@@ -146,6 +166,7 @@ export default function Cartera() {
     else {
       setModalVisible(false);
       setTicker(''); setNombre(''); setCantidad(''); setPrecioCompra('');
+      setSugerencias([]);
       cargarDatos();
     }
     setGuardando(false);
@@ -286,23 +307,56 @@ export default function Cartera() {
       {/* MODAL AGREGAR */}
       <Modal visible={modalVisible} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <TouchableOpacity activeOpacity={1} onPress={() => Keyboard.dismiss()} style={styles.modalOverlay}>
+          <TouchableOpacity activeOpacity={1} onPress={() => { Keyboard.dismiss(); setSugerencias([]); }} style={styles.modalOverlay}>
             <TouchableOpacity activeOpacity={1} style={styles.modalContainer}>
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitulo}>Agregar posición</Text>
-                  <TouchableOpacity onPress={() => setModalVisible(false)}>
+                  <TouchableOpacity onPress={() => { setModalVisible(false); setSugerencias([]); }}>
                     <Text style={styles.modalCerrar}>✕</Text>
                   </TouchableOpacity>
                 </View>
 
-                <TextInput style={styles.input} placeholder="Ticker (ej: GGAL, AAPL, BTC)" placeholderTextColor={theme.gray}
-                  value={ticker} onChangeText={t => setTicker(t.toUpperCase())} autoCapitalize="characters"
-                  returnKeyType="next" onSubmitEditing={() => refNombre.current?.focus()} blurOnSubmit={false} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ticker (ej: GGAL, AAPL, GD30)"
+                  placeholderTextColor={theme.gray}
+                  value={ticker}
+                  onChangeText={onChangeTicker}
+                  autoCapitalize="characters"
+                  returnKeyType="next"
+                  onSubmitEditing={() => refNombre.current?.focus()}
+                  blurOnSubmit={false}
+                />
+
+                {sugerencias.length > 0 && (
+                  <View style={styles.sugerenciasContainer}>
+                    {sugerencias.map((s, i) => (
+                      <TouchableOpacity
+                        key={s.ticker}
+                        style={[styles.sugerenciaFila, i === sugerencias.length - 1 && { borderBottomWidth: 0 }]}
+                        onPress={() => seleccionarSugerencia(s)}>
+                        <View style={[styles.sugerenciaIcono, { backgroundColor: COLORES_CATEGORIA[s.categoria] + '22' }]}>
+                          <Text style={[styles.sugerenciaLetra, { color: COLORES_CATEGORIA[s.categoria] }]}>
+                            {s.ticker[0]}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.sugerenciaTicker}>{s.ticker}</Text>
+                          <Text style={styles.sugerenciaNombre}>{s.nombre}</Text>
+                        </View>
+                        <Text style={[styles.sugerenciaCategoria, { color: COLORES_CATEGORIA[s.categoria] }]}>
+                          {s.categoria.replace('_', ' ').toUpperCase()}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
                 <TextInput style={styles.input} placeholder="Nombre (opcional)" placeholderTextColor={theme.gray}
                   value={nombre} onChangeText={setNombre}
                   ref={refNombre} returnKeyType="next" onSubmitEditing={() => refCantidad.current?.focus()} blurOnSubmit={false} />
-                <TextInput style={styles.input} placeholder="Cantidad" placeholderTextColor={theme.gray}
+                <TextInput style={styles.input} placeholder="Cantidad / VN" placeholderTextColor={theme.gray}
                   value={cantidad} onChangeText={setCantidad} keyboardType="numeric"
                   ref={refCantidad} returnKeyType="next" onSubmitEditing={() => refPrecio.current?.focus()} blurOnSubmit={false} />
                 <TextInput style={styles.input} placeholder="Precio de compra" placeholderTextColor={theme.gray}
@@ -356,7 +410,7 @@ export default function Cartera() {
                 <TextInput style={styles.input} placeholder="Nombre" placeholderTextColor={theme.gray}
                   value={editNombre} onChangeText={setEditNombre}
                   returnKeyType="next" onSubmitEditing={() => refEditCantidad.current?.focus()} blurOnSubmit={false} />
-                <TextInput style={styles.input} placeholder="Cantidad" placeholderTextColor={theme.gray}
+                <TextInput style={styles.input} placeholder="Cantidad / VN" placeholderTextColor={theme.gray}
                   value={editCantidad} onChangeText={setEditCantidad} keyboardType="numeric"
                   ref={refEditCantidad} returnKeyType="next" onSubmitEditing={() => refEditPrecio.current?.focus()} blurOnSubmit={false} />
                 <TextInput style={styles.input} placeholder="Precio de compra" placeholderTextColor={theme.gray}
@@ -418,6 +472,9 @@ export default function Cartera() {
                   nombre: menuPos!.nombre,
                   precioActual: precioActual.toString(),
                   gpPct: gpPct.toString(),
+                  categoria: menuPos!.categoria,
+                  cantidad: menuPos!.cantidad.toString(),
+                  precioCompra: menuPos!.precio_compra.toString(),
                 }
               });
             }}>
@@ -498,4 +555,11 @@ const getStyles = (theme: any) => StyleSheet.create({
   menuOpcionTexto: { flex: 1, color: theme.white, fontSize: 15, fontWeight: '600' },
   menuOpcionFlecha: { color: theme.gray, fontSize: 18 },
   menuDivider: { height: 1, backgroundColor: theme.border, marginVertical: 4 },
+  sugerenciasContainer: { backgroundColor: theme.card2, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: theme.border, overflow: 'hidden' },
+  sugerenciaFila: { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: theme.border, gap: 10 },
+  sugerenciaIcono: { width: 34, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  sugerenciaLetra: { fontWeight: '800', fontSize: 14 },
+  sugerenciaTicker: { color: theme.white, fontWeight: '700', fontSize: 13 },
+  sugerenciaNombre: { color: theme.gray, fontSize: 11, marginTop: 1 },
+  sugerenciaCategoria: { fontSize: 10, fontWeight: '700' },
 });

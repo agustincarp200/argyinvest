@@ -1,3 +1,4 @@
+import { esBonoOLetra, formatFecha, getInstrumento, getPagosFuturos, labelTipoPago } from '@/lib/renta-fija';
 import { useTheme } from '@/lib/theme';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -92,9 +93,16 @@ function GraficoConEjes({
 export default function Detalle() {
   const { theme } = useTheme();
   const styles = getStyles(theme);
-  const { ticker, nombre, precioActual, gpPct } = useLocalSearchParams<{
+  const { ticker, nombre, precioActual, gpPct, categoria, cantidad, precioCompra } = useLocalSearchParams<{
     ticker: string; nombre: string; precioActual: string; gpPct: string;
+    categoria: string; cantidad: string; precioCompra: string;
   }>();
+
+  const esRentaFija = esBonoOLetra(categoria ?? '');
+  const instrumento = esRentaFija ? getInstrumento(ticker ?? '') : null;
+  const pagosFuturos = esRentaFija
+    ? getPagosFuturos(ticker ?? '', parseFloat(cantidad ?? '1'), parseFloat(precioCompra ?? '0'))
+    : [];
 
   const [periodo, setPeriodo] = useState(PERIODOS[2]);
   const [datos, setDatos] = useState<{ x: number; y: number }[]>([]);
@@ -220,6 +228,77 @@ export default function Detalle() {
           </Text>
         </View>
       </View>
+
+      {/* FICHA RENTA FIJA */}
+      {esRentaFija && instrumento && (
+        <View style={styles.rentaFijaContainer}>
+          <Text style={styles.seccionTitulo}>📋 Ficha del instrumento</Text>
+          <View style={styles.fichaCard}>
+            <View style={styles.fichaFila}>
+              <Text style={styles.fichaLabel}>Tipo</Text>
+              <Text style={styles.fichaValor}>{instrumento.tipo.replace('_', ' ').toUpperCase()}</Text>
+            </View>
+            <View style={styles.fichaFila}>
+              <Text style={styles.fichaLabel}>Moneda</Text>
+              <Text style={styles.fichaValor}>{instrumento.moneda}</Text>
+            </View>
+            <View style={styles.fichaFila}>
+              <Text style={styles.fichaLabel}>Vencimiento</Text>
+              <Text style={[styles.fichaValor, { color: theme.gold }]}>{formatFecha(instrumento.vencimiento)}</Text>
+            </View>
+            {instrumento.tasa_cupon !== undefined && instrumento.tasa_cupon > 0 && (
+              <View style={styles.fichaFila}>
+                <Text style={styles.fichaLabel}>Tasa cupón</Text>
+                <Text style={[styles.fichaValor, { color: theme.green }]}>{instrumento.tasa_cupon}% anual</Text>
+              </View>
+            )}
+            {instrumento.descripcion && (
+              <View style={[styles.fichaFila, { borderBottomWidth: 0 }]}>
+                <Text style={styles.fichaLabel}>Ajuste</Text>
+                <Text style={[styles.fichaValor, { flex: 1, textAlign: 'right' }]}>{instrumento.descripcion}</Text>
+              </View>
+            )}
+          </View>
+
+          {pagosFuturos.length > 0 && (
+            <>
+              <Text style={styles.seccionTitulo}>💰 Flujo de pagos futuros</Text>
+              <View style={styles.fichaCard}>
+                {pagosFuturos.map((pago, i) => (
+                  <View key={i} style={[styles.pagoFila, i === pagosFuturos.length - 1 && { borderBottomWidth: 0 }]}>
+                    <View style={[styles.pagoIcono, {
+                      backgroundColor: pago.tipo === 'cupon' ? theme.green + '22'
+                        : pago.tipo === 'amortizacion' ? theme.blue + '22'
+                        : theme.gold + '22'
+                    }]}>
+                      <Text style={{ fontSize: 14 }}>
+                        {pago.tipo === 'cupon' ? '💰' : pago.tipo === 'amortizacion' ? '🏦' : '✅'}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.pagoTipo}>{labelTipoPago(pago.tipo)}</Text>
+                      <Text style={styles.pagoFecha}>{formatFecha(pago.fecha)}</Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={styles.pagoMonto}>
+                        {pago.moneda === 'USD' ? 'u$s' : '$'} {pago.monto.toLocaleString('es-AR', { maximumFractionDigits: 2 })}
+                      </Text>
+                      <Text style={[styles.pagoDias, {
+                        color: pago.diasRestantes <= 7 ? theme.red
+                          : pago.diasRestantes <= 30 ? theme.gold
+                          : theme.green
+                      }]}>
+                        en {pago.diasRestantes}d
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+        </View>
+      )}
+
     </ScrollView>
   );
 }
@@ -242,8 +321,20 @@ const getStyles = (theme: any) => StyleSheet.create({
   periodosContainer: { flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 20, marginTop: 8, marginBottom: 20, backgroundColor: theme.card, borderRadius: 12, padding: 4, borderWidth: 1, borderColor: theme.border },
   periodoBoton: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 10 },
   periodoTexto: { color: theme.gray, fontSize: 12, fontWeight: '700' },
-  statsContainer: { marginHorizontal: 20, backgroundColor: theme.card, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: theme.border, marginBottom: 30 },
+  statsContainer: { marginHorizontal: 20, backgroundColor: theme.card, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: theme.border, marginBottom: 20 },
   statFila: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.border },
   statLabel: { color: theme.gray, fontSize: 13 },
   statValor: { color: theme.white, fontSize: 13, fontWeight: '700' },
+  rentaFijaContainer: { paddingHorizontal: 20, marginBottom: 30 },
+  seccionTitulo: { color: theme.white, fontSize: 15, fontWeight: '700', marginBottom: 10, marginTop: 8 },
+  fichaCard: { backgroundColor: theme.card, borderRadius: 12, paddingHorizontal: 16, borderWidth: 1, borderColor: theme.border, marginBottom: 16 },
+  fichaFila: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.border },
+  fichaLabel: { color: theme.gray, fontSize: 13 },
+  fichaValor: { color: theme.white, fontSize: 13, fontWeight: '700' },
+  pagoFila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.border, gap: 12 },
+  pagoIcono: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  pagoTipo: { color: theme.white, fontSize: 13, fontWeight: '600' },
+  pagoFecha: { color: theme.gray, fontSize: 11, marginTop: 2 },
+  pagoMonto: { color: theme.white, fontSize: 13, fontWeight: '700' },
+  pagoDias: { fontSize: 11, fontWeight: '600', marginTop: 2 },
 });

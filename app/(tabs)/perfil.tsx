@@ -139,6 +139,7 @@ export default function Perfil() {
                 key={i}
                 style={[styles.opcionFila, i === opciones.length - 1 && { borderBottomWidth: 0 }]}
                 onPress={
+                  op.label === 'Calendario de pagos' ? () => router.push('/calendario') :
                   op.label === 'Alertas de precio' ? () => router.push('/alertas') :
                   op.label === 'Modo oscuro' ? toggleTheme :
                   op.label === 'Cerrar sesión' ? () => supabase.auth.signOut() :
