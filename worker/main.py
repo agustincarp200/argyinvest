@@ -15,21 +15,6 @@ NASDAQ  = ["AAPL", "GOOGL", "MSFT", "AMZN", "NVDA", "META", "TSLA", "AMD", "BABA
 CRYPTO  = ["bitcoin", "ethereum", "solana", "cardano", "tether"]
 BYMA    = ["GGAL.BA", "PAMP.BA", "BMA.BA", "ALUA.BA", "TXAR.BA", "CRES.BA", "CEPU.BA", "LOMA.BA", "VALO.BA", "SUPV.BA"]
 
-MAPA_CATEGORIAS = {
-    "Money Market":              "money_market",
-    "Renta Fija":                "renta_fija",
-    "Renta Variable":            "renta_variable",
-    "Renta Mixta":               "mixto",
-    "Plazo Fijo":                "renta_fija",
-    "Renta Fija en Dólares":     "renta_fija_usd",
-    "Dollar Linked":             "dollar_linked",
-    "Renta Variable en Dólares": "renta_variable_usd",
-    "Renta Mixta en Dólares":    "mixto_usd",
-    "Infraestructura":           "infraestructura",
-    "Pymes":                     "pymes",
-    "Retiro":                    "retiro",
-}
-
 # ── DOLAR ──────────────────────────────────────────────
 def get_dolar_ccl():
     try:
@@ -45,7 +30,7 @@ def get_dolar_mep():
     except:
         return 0
 
-# ── YAHOO / CRYPTO ─────────────────────────────────────
+# ── YAHOO ──────────────────────────────────────────────
 def get_yahoo_prices(tickers):
     precios = {}
     try:
@@ -63,6 +48,7 @@ def get_yahoo_prices(tickers):
         print(f"Error Yahoo: {e}")
     return precios
 
+# ── CRYPTO ─────────────────────────────────────────────
 def get_crypto_prices():
     precios = {}
     try:
@@ -83,160 +69,103 @@ def get_crypto_prices():
         print(f"Error Crypto: {e}")
     return precios
 
-# ── CAFCI ──────────────────────────────────────────────
-def get_todos_los_fondos():
+# ── FCIs ARGENTINADATOS ────────────────────────────────
+ENDPOINTS_FCI = {
+    "money_market":   "https://api.argentinadatos.com/v1/finanzas/fci/mercadoDinero/ultimo",
+    "renta_fija":     "https://api.argentinadatos.com/v1/finanzas/fci/rentaFija/ultimo",
+    "renta_variable": "https://api.argentinadatos.com/v1/finanzas/fci/rentaVariable/ultimo",
+    "mixto":          "https://api.argentinadatos.com/v1/finanzas/fci/rentaMixta/ultimo",
+    "otros":          "https://api.argentinadatos.com/v1/finanzas/fci/otros/ultimo",
+}
+
+def get_fci_por_categoria(categoria, url):
     try:
-        print("  📡 Consultando catálogo CAFCI...")
-        r = requests.get(
-            "https://api.cafci.org.ar/fondo?limit=500",
-            timeout=30,
-            headers={"User-Agent": "Mozilla/5.0"}
-        )
+        r = requests.get(url, timeout=20)
         if r.status_code != 200:
-            print(f"  ⚠️  CAFCI respondió {r.status_code}")
+            print(f"  ⚠️  ArgentinaDatos [{categoria}] respondió {r.status_code}")
             return []
         data = r.json()
-        fondos = data.get("data", [])
-        print(f"  📦 Total fondos en CAFCI: {len(fondos)}")
-        return fondos
-    except requests.exceptions.Timeout:
-        print("  ⚠️  CAFCI timeout - se reintentará en el próximo ciclo")
-        return []
+        print(f"  📁 {categoria}: {len(data)} fondos recibidos")
+        return data
     except Exception as e:
-        print(f"  ❌ Error obteniendo catálogo CAFCI: {e}")
+        print(f"  ❌ Error [{categoria}]: {e}")
         return []
 
-def get_top_fondos_por_categoria(fondos, max_por_categoria=3):
-    por_categoria = {}
-    for f in fondos:
-        try:
-            nombre_cat = f.get("tipoFondo", {}).get("nombre", "")
-            cat_interna = MAPA_CATEGORIAS.get(nombre_cat)
-            if not cat_interna:
-                continue
-            patrimonio = float(f.get("patrimonio", 0) or 0)
-            id_cafci = f.get("id")
-            if not id_cafci or patrimonio <= 0:
-                continue
-            if cat_interna not in por_categoria:
-                por_categoria[cat_interna] = []
-            por_categoria[cat_interna].append({
-                "id": id_cafci,
-                "nombre": f.get("nombre", ""),
-                "administradora": f.get("societadGerente", {}).get("nombre", ""),
-                "categoria": cat_interna,
-                "patrimonio": patrimonio,
-            })
-        except:
-            continue
-
-    seleccionados = []
-    for cat, lista in por_categoria.items():
-        lista.sort(key=lambda x: x["patrimonio"], reverse=True)
-        top = lista[:max_por_categoria]
-        seleccionados.extend(top)
-        print(f"  📁 {cat}: {len(top)} fondos")
-
-    print(f"  ✅ Total a actualizar: {len(seleccionados)}")
-    return seleccionados
-
-def get_cafci_cuotaparte(id_cafci):
+def get_fci_penultimo(url):
     try:
-        hoy = datetime.now().strftime("%Y-%m-%d")
-        hace_5_dias = (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d")
-        url = f"https://api.cafci.org.ar/fd?c={id_cafci}&d={hace_5_dias},{hoy}&p=1&e=1"
-        r = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
-        filas = r.json().get("data", [])
-        if len(filas) < 2:
-            return None
-        filas = sorted(filas, key=lambda x: x.get("fecha", ""))
-        cp_hoy = float(filas[-1].get("vcp", 0))
-        cp_ayer = float(filas[-2].get("vcp", 0))
-        variacion = ((cp_hoy - cp_ayer) / cp_ayer * 100) if cp_ayer > 0 else 0
-        return {"cuotaparte": round(cp_hoy, 6), "variacion_diaria": round(variacion, 4)}
+        url_pen = url.replace("/ultimo", "/penultimo")
+        r = requests.get(url_pen, timeout=20)
+        if r.status_code != 200:
+            return {}
+        data = r.json()
+        return {item["fondo"]: float(item.get("vcp", 0)) for item in data}
     except:
-        return None
-
-def get_cafci_rendimientos(id_cafci):
-    try:
-        hoy = datetime.now()
-        fecha_30d = (hoy - timedelta(days=30)).strftime("%Y-%m-%d")
-        fecha_1a  = (hoy - timedelta(days=365)).strftime("%Y-%m-%d")
-        fecha_hoy = hoy.strftime("%Y-%m-%d")
-
-        rend_30d = None
-        rend_1a  = None
-
-        r30 = requests.get(
-            f"https://api.cafci.org.ar/fd?c={id_cafci}&d={fecha_30d},{fecha_hoy}&p=1&e=1",
-            timeout=15, headers={"User-Agent": "Mozilla/5.0"}
-        )
-        datos_30 = sorted(r30.json().get("data", []), key=lambda x: x.get("fecha", ""))
-        if len(datos_30) >= 2:
-            cp_i = float(datos_30[0].get("vcp", 0))
-            cp_f = float(datos_30[-1].get("vcp", 0))
-            if cp_i > 0:
-                rend_30d = round(((cp_f - cp_i) / cp_i) * 100, 2)
-
-        r1a = requests.get(
-            f"https://api.cafci.org.ar/fd?c={id_cafci}&d={fecha_1a},{fecha_hoy}&p=1&e=1",
-            timeout=15, headers={"User-Agent": "Mozilla/5.0"}
-        )
-        datos_1a = sorted(r1a.json().get("data", []), key=lambda x: x.get("fecha", ""))
-        if len(datos_1a) >= 2:
-            cp_i = float(datos_1a[0].get("vcp", 0))
-            cp_f = float(datos_1a[-1].get("vcp", 0))
-            if cp_i > 0:
-                rend_1a = round(((cp_f - cp_i) / cp_i) * 100, 2)
-
-        return {"rendimiento_30d": rend_30d, "rendimiento_1a": rend_1a}
-    except:
-        return {"rendimiento_30d": None, "rendimiento_1a": None}
+        return {}
 
 def actualizar_fcis():
-    print("\n📊 Actualizando FCIs desde CAFCI...")
-    fondos = get_todos_los_fondos()
-    if not fondos:
-        print("  ⚠️  No se pudo obtener el catálogo de CAFCI")
-        return
-
-    seleccionados = get_top_fondos_por_categoria(fondos, max_por_categoria=3)
+    print("\n📊 Actualizando FCIs desde ArgentinaDatos...")
     actualizados = 0
 
-    for fondo in seleccionados:
-        id_cafci = fondo["id"]
-        print(f"  → [{fondo['categoria']}] {fondo['nombre'][:50]} (id={id_cafci})")
-
-        cp_data = get_cafci_cuotaparte(id_cafci)
-        if not cp_data:
-            print(f"    ⚠️  Sin cuotaparte")
+    for categoria, url in ENDPOINTS_FCI.items():
+        fondos_hoy = get_fci_por_categoria(categoria, url)
+        if not fondos_hoy:
             continue
 
-        rend_data = get_cafci_rendimientos(id_cafci)
+        vcps_ayer = get_fci_penultimo(url)
 
-        try:
-            supabase.table("fci_cache").upsert({
-                "id_cafci": id_cafci,
-                "ticker": f"FCI_{id_cafci}",
-                "nombre": fondo["nombre"],
-                "categoria": fondo["categoria"],
-                "cuotaparte": cp_data["cuotaparte"],
-                "variacion_diaria": cp_data["variacion_diaria"],
-                "rendimiento_30d": rend_data.get("rendimiento_30d"),
-                "rendimiento_1a": rend_data.get("rendimiento_1a"),
-                "moneda": "USD" if "usd" in fondo["categoria"] else "ARS",
-                "updated_at": datetime.now().isoformat(),
-            }, on_conflict="id_cafci").execute()
-            print(f"    ✅ CP={cp_data['cuotaparte']:.4f} ({cp_data['variacion_diaria']:+.2f}%) | 30d={rend_data.get('rendimiento_30d')}% | 1a={rend_data.get('rendimiento_1a')}%")
-            actualizados += 1
-        except Exception as e:
-            print(f"    ❌ Error: {e}")
+        for fondo in fondos_hoy:
+            nombre = fondo.get("fondo", "")
+            vcp_hoy = float(fondo.get("vcp", 0) or 0)
 
-    print(f"\n  📦 FCIs actualizados: {actualizados}/{len(seleccionados)}")
+            if vcp_hoy <= 0 or not nombre:
+                continue
+
+            vcp_ayer = vcps_ayer.get(nombre, 0)
+            variacion = ((vcp_hoy - vcp_ayer) / vcp_ayer * 100) if vcp_ayer > 0 else 0
+
+            ticker = "FCI_" + nombre[:40].upper().replace(" ", "_").replace("/", "_").replace("-", "_")
+
+            cat_interna = categoria
+            nombre_lower = nombre.lower()
+            if "dollar" in nombre_lower or "dólar" in nombre_lower or "usd" in nombre_lower:
+                cat_interna = "dollar_linked"
+            elif "cer" in nombre_lower or "ajust" in nombre_lower:
+                cat_interna = "cer"
+            elif "infraestructura" in nombre_lower:
+                cat_interna = "infraestructura"
+            elif "pyme" in nombre_lower:
+                cat_interna = "pymes"
+
+            id_unico = abs(hash(nombre)) % 10**8
+
+            try:
+                supabase.table("fci_cache").upsert({
+                    "id_cafci": id_unico,
+                    "ticker": ticker,
+                    "nombre": nombre,
+                    "categoria": cat_interna,
+                    "cuotaparte": round(vcp_hoy, 6),
+                    "variacion_diaria": round(variacion, 4),
+                    "rendimiento_30d": None,
+                    "rendimiento_1a": None,
+                    "moneda": "USD" if cat_interna in ["dollar_linked", "renta_fija_usd", "renta_variable_usd"] else "ARS",
+                    "updated_at": datetime.now().isoformat(),
+                }, on_conflict="id_cafci").execute()
+                actualizados += 1
+            except Exception as e:
+                print(f"    ❌ Error guardando {nombre[:30]}: {e}")
+
+    print(f"\n  📦 FCIs actualizados: {actualizados}")
 
 # ── PRECIOS CACHE ──────────────────────────────────────
 def guardar_precios(ticker, precio, cambio, moneda, categoria, fuente):
+    import math
     try:
+        if math.isnan(precio) or math.isinf(precio):
+            print(f"⚠️  {ticker}: precio inválido ({precio}), saltando")
+            return
+        if math.isnan(cambio) or math.isinf(cambio):
+            cambio = 0.0
         supabase.table("precios_cache").upsert({
             "ticker": ticker,
             "precio": precio,
@@ -267,12 +196,12 @@ def enviar_notificacion_push(token, titulo, cuerpo):
 def verificar_alertas(precios_map):
     print("\n🔔 Verificando alertas...")
     try:
-        alertas = supabase.table("alertas").select("*, usuarios(push_token)").eq("activa", True).eq("disparada", False).execute()
+        alertas = supabase.table("alertas").select("*").eq("activa", True).eq("disparada", False).execute()
         for alerta in alertas.data:
             ticker = alerta["ticker"]
             tipo = alerta["tipo"]
             valor = float(alerta["valor"])
-            push_token = alerta.get("usuarios", {}).get("push_token")
+            usuario_id = alerta["usuario_id"]
 
             precio_data = precios_map.get(ticker) or precios_map.get(f"{ticker}.BA")
             if not precio_data:
@@ -300,6 +229,8 @@ def verificar_alertas(precios_map):
             if disparar:
                 print(f"🚨 Alerta disparada: {mensaje}")
                 supabase.table("alertas").update({"disparada": True}).eq("id", alerta["id"]).execute()
+                usuario = supabase.table("usuarios").select("push_token").eq("id", usuario_id).execute()
+                push_token = usuario.data[0].get("push_token") if usuario.data else None
                 if push_token:
                     enviar_notificacion_push(push_token, "⚡ Alerta A Contar", mensaje)
 
@@ -342,9 +273,7 @@ def main():
         guardar_precios(ticker_limpio, data["precio"], data["cambio"], "ARS", "byma", "yahoo")
         precios_map[ticker_limpio] = data
 
-    # FCIs
     actualizar_fcis()
-
     verificar_alertas(precios_map)
 
     print("\n✅ Worker finalizado!\n")
