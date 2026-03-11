@@ -15,7 +15,20 @@ type Operacion = {
   notas: string;
 };
 
+const TIPOS_OP = [
+  { id: 'COMPRA',          label: 'Compra',         color: '#00D26A', icono: '↑' },
+  { id: 'VENTA',           label: 'Venta',           color: '#FF4D4D', icono: '↓' },
+  { id: 'SUSCRIPCION_FCI', label: 'Suscripción FCI', color: '#22D3EE', icono: '→' },
+  { id: 'RESCATE_FCI',     label: 'Rescate FCI',     color: '#F59E0B', icono: '←' },
+  { id: 'ADQUISICION',     label: 'Adquisición',     color: '#A855F7', icono: '+' },
+];
+
+function getTipoInfo(tipo: string) {
+  return TIPOS_OP.find(t => t.id === tipo) ?? { color: '#888', icono: '·', label: tipo };
+}
+
 function fechaAInput(iso: string) {
+  if (!iso) return '';
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y}`;
 }
@@ -23,20 +36,21 @@ function fechaAInput(iso: string) {
 function inputAFecha(input: string) {
   const [d, m, y] = input.split('/');
   if (!d || !m || !y) return null;
-  return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
 }
 
 function formatearFechaInput(texto: string) {
   const solo = texto.replace(/\D/g, '').slice(0, 8);
-  let resultado = solo;
-  if (solo.length > 2) resultado = solo.slice(0,2) + '/' + solo.slice(2);
-  if (solo.length > 4) resultado = solo.slice(0,2) + '/' + solo.slice(2,4) + '/' + solo.slice(4);
-  return resultado;
+  let r = solo;
+  if (solo.length > 2) r = solo.slice(0, 2) + '/' + solo.slice(2);
+  if (solo.length > 4) r = solo.slice(0, 2) + '/' + solo.slice(2, 4) + '/' + solo.slice(4);
+  return r;
 }
 
 export default function Historial() {
   const { theme } = useTheme();
   const styles = getStyles(theme);
+
   const [operaciones, setOperaciones] = useState<Operacion[]>([]);
   const [cargando, setCargando] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -73,9 +87,67 @@ export default function Historial() {
 
   useEffect(() => { cargarOperaciones(); }, []);
 
+  function resetForm() {
+    setTicker('');
+    setCantidad('');
+    setPrecio('');
+    setComision('0');
+    setNotas('');
+    setTipo('COMPRA');
+    setFecha(fechaAInput(new Date().toISOString().split('T')[0]));
+  }
+
+  async function actualizarPosicion(userId: string, tickerOp: string, cantidadOp: number) {
+    const { data: posiciones } = await supabase
+      .from('posiciones')
+      .select('*')
+      .eq('usuario_id', userId)
+      .eq('ticker', tickerOp.toUpperCase());
+
+    if (!posiciones || posiciones.length === 0) return;
+    const pos = posiciones[0];
+    const nuevaCantidad = pos.cantidad - cantidadOp;
+
+    if (nuevaCantidad <= 0) {
+      await supabase.from('posiciones').delete().eq('id', pos.id);
+    } else {
+      await supabase.from('posiciones').update({ cantidad: nuevaCantidad }).eq('id', pos.id);
+    }
+  }
+
+  async function insertarOperacion(userId: string, cantidadNum: number, precioNum: number, fechaISO: string, esEgreso: boolean) {
+    const { error } = await supabase.from('operaciones').insert({
+      usuario_id: userId,
+      ticker: ticker.toUpperCase(),
+      tipo,
+      cantidad: cantidadNum,
+      precio: precioNum,
+      comision: parseFloat(comision) || 0,
+      moneda,
+      fecha: fechaISO,
+      notas,
+    });
+
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else {
+      if (esEgreso) {
+        await actualizarPosicion(userId, ticker, cantidadNum);
+      }
+      setModalVisible(false);
+      resetForm();
+      cargarOperaciones();
+    }
+    setGuardando(false);
+  }
+
   async function agregarOperacion() {
-    if (!ticker || !cantidad || !precio) {
-      Alert.alert('Error', 'Completá ticker, cantidad y precio');
+    if (!ticker || !cantidad) {
+      Alert.alert('Error', 'Completá ticker y cantidad');
+      return;
+    }
+    if (tipo !== 'ADQUISICION' && !precio) {
+      Alert.alert('Error', 'Completá el precio');
       return;
     }
     const fechaISO = inputAFecha(fecha);
@@ -83,30 +155,49 @@ export default function Historial() {
       Alert.alert('Error', 'Fecha inválida. Usá el formato DD/MM/AAAA');
       return;
     }
+
     setGuardando(true);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) { setGuardando(false); return; }
 
-    const { error } = await supabase.from('operaciones').insert({
-      usuario_id: user.id,
-      ticker: ticker.toUpperCase(),
-      tipo,
-      cantidad: parseFloat(cantidad),
-      precio: parseFloat(precio),
-      comision: parseFloat(comision) || 0,
-      moneda,
-      fecha: fechaISO,
-      notas,
-    });
+    const cantidadNum = parseFloat(cantidad);
+    const precioNum = parseFloat(precio) || 0;
+    const esEgreso = tipo === 'VENTA' || tipo === 'RESCATE_FCI';
 
-    if (error) Alert.alert('Error', error.message);
-    else {
-      setModalVisible(false);
-      setTicker(''); setCantidad(''); setPrecio(''); setComision('0'); setNotas('');
-      setFecha(fechaAInput(new Date().toISOString().split('T')[0]));
-      cargarOperaciones();
+    if (esEgreso) {
+      const { data: posiciones } = await supabase
+        .from('posiciones')
+        .select('cantidad')
+        .eq('usuario_id', user.id)
+        .eq('ticker', ticker.toUpperCase());
+
+      if (!posiciones || posiciones.length === 0) {
+        Alert.alert(
+          'Atención',
+          `No tenés posición en ${ticker.toUpperCase()} en la cartera. ¿Querés registrar la operación igual?`,
+          [
+            { text: 'Cancelar', style: 'cancel', onPress: () => setGuardando(false) },
+            { text: 'Registrar igual', onPress: () => insertarOperacion(user.id, cantidadNum, precioNum, fechaISO, false) },
+          ]
+        );
+        return;
+      }
+
+      const cantidadActual = posiciones[0].cantidad;
+      if (cantidadNum > cantidadActual) {
+        Alert.alert(
+          'Atención',
+          `Solo tenés ${cantidadActual} unidades de ${ticker.toUpperCase()}. ¿Querés registrar la operación igual?`,
+          [
+            { text: 'Cancelar', style: 'cancel', onPress: () => setGuardando(false) },
+            { text: 'Registrar igual', onPress: () => insertarOperacion(user.id, cantidadNum, precioNum, fechaISO, false) },
+          ]
+        );
+        return;
+      }
     }
-    setGuardando(false);
+
+    await insertarOperacion(user.id, cantidadNum, precioNum, fechaISO, esEgreso);
   }
 
   async function eliminarOperacion(op: Operacion) {
@@ -131,13 +222,15 @@ export default function Historial() {
     );
   }
 
-  const totalCompras = operaciones
-    .filter(o => o.tipo === 'COMPRA')
+  const totalIngresado = operaciones
+    .filter(o => ['COMPRA', 'SUSCRIPCION_FCI', 'ADQUISICION'].includes(o.tipo))
     .reduce((s, o) => s + o.cantidad * o.precio, 0);
 
-  const totalVentas = operaciones
-    .filter(o => o.tipo === 'VENTA')
+  const totalRetirado = operaciones
+    .filter(o => ['VENTA', 'RESCATE_FCI'].includes(o.tipo))
     .reduce((s, o) => s + o.cantidad * o.precio, 0);
+
+  const precioPlaceholder = tipo === 'ADQUISICION' ? 'Precio (opcional)' : 'Precio unitario';
 
   return (
     <ScrollView style={styles.container}>
@@ -154,15 +247,15 @@ export default function Historial() {
 
       <View style={styles.tarjetasRow}>
         <View style={styles.tarjeta}>
-          <Text style={styles.tarjetaLabel}>Total comprado</Text>
+          <Text style={styles.tarjetaLabel}>Total ingresado</Text>
           <Text style={[styles.tarjetaValor, { color: theme.green }]}>
-            $ {totalCompras.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+            $ {totalIngresado.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
           </Text>
         </View>
         <View style={styles.tarjeta}>
-          <Text style={styles.tarjetaLabel}>Total vendido</Text>
+          <Text style={styles.tarjetaLabel}>Total retirado</Text>
           <Text style={[styles.tarjetaValor, { color: theme.red }]}>
-            $ {totalVentas.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+            $ {totalRetirado.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
           </Text>
         </View>
       </View>
@@ -181,31 +274,32 @@ export default function Historial() {
       ) : (
         <View style={styles.tabla}>
           {operaciones.map((op, i) => {
-            const esCompra = op.tipo === 'COMPRA';
+            const tipoInfo = getTipoInfo(op.tipo);
             const total = op.cantidad * op.precio;
             return (
               <View key={op.id} style={[styles.fila, i === operaciones.length - 1 && { borderBottomWidth: 0 }]}>
-                <View style={[styles.filaIcono, { backgroundColor: esCompra ? '#00D26A22' : '#FF4D4D22' }]}>
-                  <Text style={[styles.filaIconoTexto, { color: esCompra ? '#00D26A' : '#FF4D4D' }]}>
-                    {esCompra ? '↑' : '↓'}
-                  </Text>
+                <View style={[styles.filaIcono, { backgroundColor: tipoInfo.color + '22' }]}>
+                  <Text style={[styles.filaIconoTexto, { color: tipoInfo.color }]}>{tipoInfo.icono}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Text style={styles.filaTicker}>{op.ticker}</Text>
-                    <View style={[styles.tipoBadge, { backgroundColor: esCompra ? '#00D26A22' : '#FF4D4D22' }]}>
-                      <Text style={[styles.tipoTexto, { color: esCompra ? '#00D26A' : '#FF4D4D' }]}>{op.tipo}</Text>
+                    <View style={[styles.tipoBadge, { backgroundColor: tipoInfo.color + '22' }]}>
+                      <Text style={[styles.tipoTexto, { color: tipoInfo.color }]}>{tipoInfo.label}</Text>
                     </View>
                   </View>
                   <Text style={styles.filaDetalle}>
-                    {op.cantidad} u. · {op.moneda} {op.precio.toLocaleString('es-AR')}
+                    {op.cantidad} u.{op.precio > 0 ? ` · ${op.moneda} ${op.precio.toLocaleString('es-AR')}` : ''}
+                    {op.comision > 0 ? ` · Com. ${op.comision.toLocaleString('es-AR')}` : ''}
                   </Text>
                   {op.notas ? <Text style={styles.filaNota}>{op.notas}</Text> : null}
                 </View>
                 <View style={{ alignItems: 'flex-end', marginRight: 8 }}>
-                  <Text style={styles.filaTotal}>
-                    $ {total.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
-                  </Text>
+                  {total > 0 && (
+                    <Text style={styles.filaTotal}>
+                      $ {total.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+                    </Text>
+                  )}
                   <Text style={styles.filaFecha}>{fechaAInput(op.fecha)}</Text>
                 </View>
                 <TouchableOpacity onPress={() => setMenuOp(op)} style={styles.menuBoton}>
@@ -225,32 +319,33 @@ export default function Historial() {
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitulo}>Nueva operación</Text>
-                  <TouchableOpacity onPress={() => setModalVisible(false)}>
+                  <TouchableOpacity onPress={() => { setModalVisible(false); resetForm(); }}>
                     <Text style={styles.modalCerrar}>✕</Text>
                   </TouchableOpacity>
                 </View>
 
-                <TextInput style={styles.input} placeholder="Ticker (ej: GGAL, AAPL)" placeholderTextColor={theme.gray}
-                  value={ticker} onChangeText={t => setTicker(t.toUpperCase())} autoCapitalize="characters"
+                <TextInput style={styles.input} placeholder="Ticker (ej: GGAL, AAPL, GD30)"
+                  placeholderTextColor={theme.gray} value={ticker}
+                  onChangeText={t => setTicker(t.toUpperCase())} autoCapitalize="characters"
                   returnKeyType="next" onSubmitEditing={() => refCantidad.current?.focus()} blurOnSubmit={false} />
 
                 <Text style={styles.inputLabel}>Tipo de operación</Text>
-                <View style={styles.tipoRow}>
-                  {['COMPRA', 'VENTA'].map(t => (
-                    <TouchableOpacity key={t}
-                      style={[styles.tipoBoton,
-                        tipo === t && { backgroundColor: t === 'COMPRA' ? '#00D26A' : '#FF4D4D',
-                        borderColor: t === 'COMPRA' ? '#00D26A' : '#FF4D4D' }]}
-                      onPress={() => setTipo(t)}>
-                      <Text style={[styles.tipoBotonTexto, tipo === t && { color: '#000' }]}>{t}</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                  {TIPOS_OP.map(t => (
+                    <TouchableOpacity key={t.id}
+                      style={[styles.tipoBoton, tipo === t.id && { backgroundColor: t.color, borderColor: t.color }]}
+                      onPress={() => setTipo(t.id)}>
+                      <Text style={[styles.tipoBotonTexto, tipo === t.id && { color: '#000' }]}>
+                        {t.icono} {t.label}
+                      </Text>
                     </TouchableOpacity>
                   ))}
-                </View>
+                </ScrollView>
 
-                <TextInput style={styles.input} placeholder="Cantidad" placeholderTextColor={theme.gray}
+                <TextInput style={styles.input} placeholder="Cantidad / VN" placeholderTextColor={theme.gray}
                   value={cantidad} onChangeText={setCantidad} keyboardType="numeric"
                   ref={refCantidad} returnKeyType="next" onSubmitEditing={() => refPrecio.current?.focus()} blurOnSubmit={false} />
-                <TextInput style={styles.input} placeholder="Precio unitario" placeholderTextColor={theme.gray}
+                <TextInput style={styles.input} placeholder={precioPlaceholder} placeholderTextColor={theme.gray}
                   value={precio} onChangeText={setPrecio} keyboardType="numeric"
                   ref={refPrecio} returnKeyType="next" onSubmitEditing={() => refComision.current?.focus()} blurOnSubmit={false} />
                 <TextInput style={styles.input} placeholder="Comisión (opcional)" placeholderTextColor={theme.gray}
@@ -286,17 +381,16 @@ export default function Historial() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* MODAL MENU TRES PUNTITOS */}
+      {/* MODAL MENU */}
       <Modal visible={!!menuOp} animationType="fade" transparent>
         <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuOp(null)}>
           <View style={styles.menuContainer}>
             <Text style={styles.menuTicker}>{menuOp?.ticker}</Text>
             <Text style={styles.menuSubtitulo}>
-              {menuOp?.tipo} · {menuOp?.cantidad} u. · $ {menuOp?.precio.toLocaleString('es-AR')}
+              {getTipoInfo(menuOp?.tipo ?? '').label} · {menuOp?.cantidad} u.
+              {(menuOp?.precio ?? 0) > 0 ? ` · $ ${menuOp?.precio.toLocaleString('es-AR')}` : ''}
             </Text>
-
             <View style={styles.menuDivider} />
-
             <TouchableOpacity style={styles.menuOpcion} onPress={() => menuOp && eliminarOperacion(menuOp)}>
               <Text style={styles.menuOpcionIcono}>🗑️</Text>
               <Text style={[styles.menuOpcionTexto, { color: theme.red }]}>Eliminar operación</Text>
@@ -345,9 +439,8 @@ const getStyles = (theme: any) => StyleSheet.create({
   modalCerrar: { color: theme.gray, fontSize: 20 },
   input: { backgroundColor: theme.card2, borderRadius: 10, padding: 14, color: theme.white, fontSize: 14, marginBottom: 12, borderWidth: 1, borderColor: theme.border },
   inputLabel: { color: theme.lgray, fontSize: 12, marginBottom: 8 },
-  tipoRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  tipoBoton: { flex: 1, backgroundColor: theme.card2, borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: theme.border },
-  tipoBotonTexto: { color: theme.lgray, fontWeight: '700' },
+  tipoBoton: { backgroundColor: theme.card2, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, borderWidth: 1, borderColor: theme.border },
+  tipoBotonTexto: { color: theme.lgray, fontWeight: '700', fontSize: 12 },
   monedaRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   monedaBoton: { flex: 1, backgroundColor: theme.card2, borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: theme.border },
   monedaTexto: { color: theme.lgray, fontWeight: '700' },
