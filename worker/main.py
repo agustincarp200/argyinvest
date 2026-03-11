@@ -367,16 +367,30 @@ def main():
 
     print("\n📊 Obteniendo precios NYSE/NASDAQ...")
     yahoo = get_yahoo_prices(NASDAQ)
+
+    # Fetchear precios ARS de CEDEARs directo de BYMA via Yahoo
+    CEDEARS_BA = [f"{t}.BA" for t in CEDEARS]
+    yahoo_ba = get_yahoo_prices(CEDEARS_BA)
+
     for ticker, data in yahoo.items():
         guardar_precios(ticker, data["precio"], data["cambio"], "USD", "nasdaq", "yahoo")
         precios_map[ticker] = data
 
         if ticker in CEDEARS:
-            ratio = CEDEAR_RATIO.get(ticker, 1.0)
-            precio_ars = round(data["precio"] * ccl * ratio, 2)
-            guardar_precios(f"{ticker}.BA", precio_ars, data["cambio"], "ARS", "cedear", "yahoo+ccl")
-            precios_map[f"{ticker}.BA"] = {"precio": precio_ars, "cambio": data["cambio"]}
-            print(f"   → CEDEAR {ticker}: ratio 1:{int(1/ratio)} · ARS ${precio_ars:,.2f}")
+            ticker_ba = f"{ticker}.BA"
+            if ticker_ba in yahoo_ba:
+                # ✅ Precio real de BYMA disponible
+                data_ba = yahoo_ba[ticker_ba]
+                guardar_precios(ticker_ba, data_ba["precio"], data_ba["cambio"], "ARS", "cedear", "yahoo_byma")
+                precios_map[ticker_ba] = data_ba
+                print(f"   → CEDEAR {ticker}: BYMA real ARS ${data_ba['precio']:,.2f}")
+             else:
+                # 🔄 Fallback: calcular con CCL y ratio
+                ratio = CEDEAR_RATIO.get(ticker, 1.0)
+                precio_ars = round(data["precio"] * ccl * ratio, 2)
+                guardar_precios(ticker_ba, precio_ars, data["cambio"], "ARS", "cedear", "yahoo+ccl")
+                precios_map[ticker_ba] = {"precio": precio_ars, "cambio": data["cambio"]}
+                print(f"   → CEDEAR {ticker}: fallback CCL ARS ${precio_ars:,.2f}")
 
     print("\n₿ Obteniendo precios crypto...")
     crypto = get_crypto_prices()
