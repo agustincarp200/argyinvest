@@ -16,19 +16,15 @@ NASDAQ  = ["AAPL", "GOOGL", "MSFT", "AMZN", "NVDA", "META", "TSLA", "AMD", "BABA
 CRYPTO  = ["bitcoin", "ethereum", "solana", "cardano", "tether"]
 BYMA    = ["GGAL.BA", "PAMP.BA", "BMA.BA", "ALUA.BA", "TXAR.BA", "CRES.BA", "CEPU.BA", "LOMA.BA", "VALO.BA", "SUPV.BA"]
 
-# Bonos y letras CER — se intenta Yahoo primero, CER como fallback
+# Bonos y letras CER — Yahoo primero, coeficiente diario como fallback
 CER_BONOS = [
-    # BONCER (TX series)
     "TX26.BA", "TX27.BA", "TX28.BA", "TX29.BA", "TX30.BA",
-    # DICP / PARP
     "DICP.BA", "PARP.BA",
-    # LECER (letras CER vigentes — actualizar cuando venzan)
     "X18F5.BA", "X21A5.BA", "X16G5.BA", "X17O5.BA",
-    # Otros CER
     "CUAP.BA", "PR13.BA",
 ]
 
-# Ratio: cuántos CEDEARs equivalen a 1 acción original
+# Ratio CEDEARs de acciones: 1 CEDEAR = 1/N acción original
 CEDEAR_RATIO = {
     "AAPL":  1/20,    # 20:1
     "GOOGL": 1/58,    # 58:1
@@ -40,6 +36,54 @@ CEDEAR_RATIO = {
     "AMD":   1/10,    # 10:1
     "BABA":  1/9,     # 9:1
     "MELI":  1/100,   # 100:1
+}
+
+# ── ETFs CEDEAR ────────────────────────────────────────
+CEDEARS_ETF = [
+    "SPY", "QQQ", "IVV",
+    "DIA",
+    "IWM",
+    "EEM", "IEMG", "ACWI",
+    "EFA", "IEUR", "EWJ",
+    "XLE", "XLF",
+    "EWZ",
+    "GLD", "SLV", "GDX",
+    "ARKK", "IBB",
+    "IBIT", "ETHA",
+    "SH", "PSQ",
+    "VIG", "IJH",
+    "USO",
+    "FXI",
+]
+
+CEDEAR_ETF_RATIO = {
+    "SPY":  1/20,
+    "QQQ":  1/20,
+    "IVV":  1/20,
+    "DIA":  1/20,
+    "IWM":  1/10,
+    "EEM":  1/5,
+    "IEMG": 1/12,
+    "ACWI": 1/26,
+    "EFA":  1/18,
+    "IEUR": 1/11,
+    "EWJ":  1/14,
+    "XLE":  1/2,
+    "XLF":  1/2,
+    "EWZ":  1/2,
+    "GLD":  1/50,
+    "SLV":  1/6,
+    "GDX":  1/10,
+    "ARKK": 1/10,
+    "IBB":  1/27,
+    "IBIT": 1/10,
+    "ETHA": 1/5,
+    "SH":   1/8,
+    "PSQ":  1/8,
+    "VIG":  1/39,
+    "IJH":  1/12,
+    "USO":  1/15,
+    "FXI":  1/5,
 }
 
 # ── DOLAR ──────────────────────────────────────────────
@@ -100,7 +144,6 @@ def get_crypto_prices():
 
 # ── CER ────────────────────────────────────────────────
 def get_cer_coeficiente():
-    """Obtiene el coeficiente CER diario desde ArgentinaDatos."""
     try:
         r = requests.get("https://api.argentinadatos.com/v1/finanzas/indices/cer", timeout=10)
         if r.status_code != 200:
@@ -109,7 +152,6 @@ def get_cer_coeficiente():
         data = r.json()
         if not data or not isinstance(data, list):
             return None
-        # Tomar los dos últimos valores para calcular variación diaria
         ultimo = data[-1]
         penultimo = data[-2] if len(data) >= 2 else None
         valor_hoy = float(ultimo.get("valor", 0))
@@ -128,9 +170,8 @@ def get_cer_coeficiente():
         return None
 
 def get_precio_cache(ticker_limpio):
-    """Obtiene el último precio conocido de precios_cache para usar como base del ajuste CER."""
     try:
-        res = supabase.table("precios_cache").select("precio, updated_at").eq("ticker", ticker_limpio).execute()
+        res = supabase.table("precios_cache").select("precio").eq("ticker", ticker_limpio).execute()
         if res.data:
             return float(res.data[0]["precio"])
         return None
@@ -138,50 +179,35 @@ def get_precio_cache(ticker_limpio):
         return None
 
 def actualizar_cer():
-    """Actualiza precios de bonos CER: Yahoo primero, coeficiente diario como fallback."""
     print("\n📐 Actualizando bonos CER...")
-
     cer_data = get_cer_coeficiente()
     if not cer_data:
         print("  ⚠️  No se pudo obtener coeficiente CER, saltando fallback")
 
-    # Guardar el coeficiente CER del día en la cache para referencia
     if cer_data and cer_data["valor"] > 0:
         guardar_precios("CER", cer_data["valor"], cer_data["variacion_diaria"], "ARS", "indice", "argentinadatos")
 
-    # Intentar Yahoo para todos los bonos CER
     yahoo_cer = get_yahoo_prices(CER_BONOS)
-
     actualizados_yahoo = 0
     actualizados_cer = 0
 
     for ticker_ba in CER_BONOS:
         ticker_limpio = ticker_ba.replace(".BA", "")
-
         if ticker_ba in yahoo_cer:
-            # ✅ Precio real de mercado disponible
             data = yahoo_cer[ticker_ba]
             guardar_precios(ticker_limpio, data["precio"], data["cambio"], "ARS", "bono_ars", "yahoo")
             actualizados_yahoo += 1
         elif cer_data:
-            # 🔄 Fallback: ajustar último precio conocido con coeficiente CER diario
             precio_base = get_precio_cache(ticker_limpio)
             if precio_base and precio_base > 0:
                 precio_ajustado = round(precio_base * (1 + cer_data["variacion_diaria"] / 100), 2)
-                guardar_precios(
-                    ticker_limpio,
-                    precio_ajustado,
-                    cer_data["variacion_diaria"],
-                    "ARS",
-                    "bono_ars",
-                    "cer_coeficiente"
-                )
+                guardar_precios(ticker_limpio, precio_ajustado, cer_data["variacion_diaria"], "ARS", "bono_ars", "cer_coeficiente")
                 actualizados_cer += 1
-                print(f"  🔄 {ticker_limpio}: ajuste CER {precio_base:.2f} → {precio_ajustado:.2f} ({cer_data['variacion_diaria']:+.4f}%)")
+                print(f"  🔄 {ticker_limpio}: CER {precio_base:.2f} → {precio_ajustado:.2f} ({cer_data['variacion_diaria']:+.4f}%)")
             else:
-                print(f"  ⚠️  {ticker_limpio}: sin precio base en cache, no se puede ajustar")
+                print(f"  ⚠️  {ticker_limpio}: sin precio base en cache")
         else:
-            print(f"  ⚠️  {ticker_limpio}: sin precio Yahoo ni coeficiente CER disponible")
+            print(f"  ⚠️  {ticker_limpio}: sin Yahoo ni CER disponible")
 
     print(f"  ✅ CER actualizados: {actualizados_yahoo} Yahoo · {actualizados_cer} por coeficiente")
 
@@ -232,13 +258,11 @@ def actualizar_fcis():
         for fondo in fondos_hoy:
             nombre = fondo.get("fondo", "")
             vcp_hoy = float(fondo.get("vcp", 0) or 0)
-
             if vcp_hoy <= 0 or not nombre:
                 continue
 
             vcp_ayer = vcps_ayer.get(nombre, 0)
             variacion = ((vcp_hoy - vcp_ayer) / vcp_ayer * 100) if vcp_ayer > 0 else 0
-
             ticker = "FCI_" + nombre[:40].upper().replace(" ", "_").replace("/", "_").replace("-", "_")
 
             cat_interna = categoria
@@ -367,8 +391,6 @@ def main():
 
     print("\n📊 Obteniendo precios NYSE/NASDAQ...")
     yahoo = get_yahoo_prices(NASDAQ)
-
-    # Fetchear precios ARS de CEDEARs directo de BYMA via Yahoo
     CEDEARS_BA = [f"{t}.BA" for t in CEDEARS]
     yahoo_ba = get_yahoo_prices(CEDEARS_BA)
 
@@ -379,13 +401,11 @@ def main():
         if ticker in CEDEARS:
             ticker_ba = f"{ticker}.BA"
             if ticker_ba in yahoo_ba:
-                # ✅ Precio real de BYMA disponible
                 data_ba = yahoo_ba[ticker_ba]
                 guardar_precios(ticker_ba, data_ba["precio"], data_ba["cambio"], "ARS", "cedear", "yahoo_byma")
                 precios_map[ticker_ba] = data_ba
                 print(f"   → CEDEAR {ticker}: BYMA real ARS ${data_ba['precio']:,.2f}")
             else:
-                # 🔄 Fallback: calcular con CCL y ratio
                 ratio = CEDEAR_RATIO.get(ticker, 1.0)
                 precio_ars = round(data["precio"] * ccl * ratio, 2)
                 guardar_precios(ticker_ba, precio_ars, data["cambio"], "ARS", "cedear", "yahoo+ccl")
@@ -404,6 +424,31 @@ def main():
         ticker_limpio = ticker.replace(".BA", "")
         guardar_precios(ticker_limpio, data["precio"], data["cambio"], "ARS", "byma", "yahoo")
         precios_map[ticker_limpio] = data
+
+    print("\n📊 Obteniendo precios CEDEARs de ETF...")
+    CEDEARS_ETF_BA = [f"{t}.BA" for t in CEDEARS_ETF]
+    yahoo_etf_ba = get_yahoo_prices(CEDEARS_ETF_BA)
+    yahoo_etf_usd = get_yahoo_prices(CEDEARS_ETF)
+
+    for ticker in CEDEARS_ETF:
+        ticker_ba = f"{ticker}.BA"
+        data_usd = yahoo_etf_usd.get(ticker)
+        data_ba = yahoo_etf_ba.get(ticker_ba)
+
+        if data_usd:
+            guardar_precios(ticker, data_usd["precio"], data_usd["cambio"], "USD", "cedear", "yahoo")
+            precios_map[ticker] = data_usd
+
+        if data_ba:
+            guardar_precios(ticker_ba, data_ba["precio"], data_ba["cambio"], "ARS", "cedear", "yahoo_byma")
+            precios_map[ticker_ba] = data_ba
+            print(f"   → ETF {ticker}: BYMA real ARS ${data_ba['precio']:,.2f}")
+        elif data_usd:
+            ratio = CEDEAR_ETF_RATIO.get(ticker, 1.0)
+            precio_ars = round(data_usd["precio"] * ccl * ratio, 2)
+            guardar_precios(ticker_ba, precio_ars, data_usd["cambio"], "ARS", "cedear", "yahoo+ccl")
+            precios_map[ticker_ba] = {"precio": precio_ars, "cambio": data_usd["cambio"]}
+            print(f"   → ETF {ticker}: fallback CCL ARS ${precio_ars:,.2f}")
 
     actualizar_cer()
     actualizar_fcis()
