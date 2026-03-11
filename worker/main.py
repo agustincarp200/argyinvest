@@ -384,7 +384,7 @@ def main():
                 guardar_precios(ticker_ba, data_ba["precio"], data_ba["cambio"], "ARS", "cedear", "yahoo_byma")
                 precios_map[ticker_ba] = data_ba
                 print(f"   → CEDEAR {ticker}: BYMA real ARS ${data_ba['precio']:,.2f}")
-             else:
+            else:
                 # 🔄 Fallback: calcular con CCL y ratio
                 ratio = CEDEAR_RATIO.get(ticker, 1.0)
                 precio_ars = round(data["precio"] * ccl * ratio, 2)
