@@ -16,6 +16,16 @@ type Posicion = {
   fecha_compra: string;
 };
 
+type PosicionAgrupada = {
+  ticker: string;
+  nombre: string;
+  categoria: string;
+  moneda: string;
+  cantidadTotal: number;
+  ppc: number; // precio promedio ponderado de compra
+  subPosiciones: Posicion[];
+};
+
 const CATEGORIAS = [
   { id: 'cedear',    label: 'CEDEAR',      color: '#F5C842' },
   { id: 'byma',     label: 'BYMA',         color: '#4D9EFF' },
@@ -44,6 +54,29 @@ const CORREL_CATEGORIAS: Record<string, Record<string, number>> = {
   fci:      { cedear: 0.05, nasdaq: 0.05, byma: 0.10, crypto: 0.00, bono_ars: 0.60, bono_usd: 0.20, letra: 0.70, on: 0.30, fci: 1.00 },
 };
 
+function agruparPosiciones(posiciones: Posicion[]): PosicionAgrupada[] {
+  const mapa: Record<string, PosicionAgrupada> = {};
+  for (const pos of posiciones) {
+    if (!mapa[pos.ticker]) {
+      mapa[pos.ticker] = {
+        ticker: pos.ticker,
+        nombre: pos.nombre,
+        categoria: pos.categoria,
+        moneda: pos.moneda,
+        cantidadTotal: 0,
+        ppc: 0,
+        subPosiciones: [],
+      };
+    }
+    const g = mapa[pos.ticker];
+    const totalAnterior = g.cantidadTotal * g.ppc;
+    g.cantidadTotal += pos.cantidad;
+    g.ppc = (totalAnterior + pos.cantidad * pos.precio_compra) / g.cantidadTotal;
+    g.subPosiciones.push(pos);
+  }
+  return Object.values(mapa);
+}
+
 function pearsonCorrelation(x: number[], y: number[]): number {
   const n = Math.min(x.length, y.length);
   if (n < 5) return NaN;
@@ -71,7 +104,7 @@ function calcularRetornos(closes: number[]): number[] {
   return retornos;
 }
 
-function getYFTicker(pos: Posicion): string {
+function getYFTickerFromAgrupada(pos: PosicionAgrupada): string {
   if (pos.categoria === 'crypto') {
     const mapa: Record<string, string> = { BTC: 'BTC-USD', ETH: 'ETH-USD', SOL: 'SOL-USD', ADA: 'ADA-USD', USDT: 'USDT-USD' };
     return mapa[pos.ticker] ?? `${pos.ticker}-USD`;
@@ -129,7 +162,8 @@ export default function Cartera() {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalEditarVisible, setModalEditarVisible] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  const [menuPos, setMenuPos] = useState<Posicion | null>(null);
+  const [menuPos, setMenuPos] = useState<PosicionAgrupada | null>(null);
+  const [menuSubPosVisible, setMenuSubPosVisible] = useState(false);
   const [modoMoneda, setModoMoneda] = useState<'ARS' | 'USD'>('ARS');
 
   // Correlación
@@ -192,13 +226,15 @@ export default function Cartera() {
 
   useEffect(() => { cargarDatos(); }, []);
 
-  async function cargarCorrelaciones(pos: Posicion[]) {
-    if (pos.length < 2) return;
+  const posicionesAgrupadas = agruparPosiciones(posiciones);
+
+  async function cargarCorrelaciones(agrupadas: PosicionAgrupada[]) {
+    if (agrupadas.length < 2) return;
     setCargandoCorrel(true);
 
     // Máximo 8 activos ordenados por valor invertido
-    const activos = [...pos]
-      .sort((a, b) => (b.cantidad * b.precio_compra) - (a.cantidad * a.precio_compra))
+    const activos = [...agrupadas]
+      .sort((a, b) => (b.cantidadTotal * b.ppc) - (a.cantidadTotal * a.ppc))
       .slice(0, 8);
 
     const retornosMap: Record<string, number[]> = {};
@@ -206,7 +242,7 @@ export default function Cartera() {
 
     await Promise.all(activos.map(async (p) => {
       try {
-        const yfTicker = getYFTicker(p);
+        const yfTicker = getYFTickerFromAgrupada(p);
         const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${yfTicker}?interval=1d&range=3mo`);
         const json = await res.json();
         const closes: number[] = (json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [])
@@ -270,6 +306,7 @@ export default function Cartera() {
     setEditCategoria(pos.categoria);
     setEditMoneda(pos.moneda);
     setMenuPos(null);
+    setMenuSubPosVisible(false);
     setModalEditarVisible(true);
   }
 
@@ -333,7 +370,7 @@ export default function Cartera() {
       setTicker(''); setNombre(''); setCantidad(''); setPrecioCompra('');
       setFechaCompra(fechaAInput(new Date().toISOString().split('T')[0]));
       setSugerencias([]);
-      setCorrelaciones([]); // resetear correlaciones al agregar nuevo activo
+      setCorrelaciones([]);
       cargarDatos();
     } else {
       Alert.alert('Error', error.message);
@@ -343,9 +380,10 @@ export default function Cartera() {
 
   async function eliminarPosicion(pos: Posicion) {
     setMenuPos(null);
+    setMenuSubPosVisible(false);
     Alert.alert(
       'Eliminar posición',
-      `¿Querés eliminar ${pos.ticker} de tu cartera?`,
+      `¿Eliminar ${pos.ticker} (${pos.cantidad} u. · $${pos.precio_compra.toLocaleString('es-AR')} · ${fechaAInput(pos.fecha_compra)})?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -366,19 +404,19 @@ export default function Cartera() {
 
   const ccl = precios['CCL'] ?? 1285;
 
-  const getPrecioActual = (pos: Posicion): number => {
-    if (pos.categoria === 'cedear') {
-      const precioARS = precios[`${pos.ticker}.BA`];
+  const getPrecioActual = (ticker: string, categoria: string, precio_compra: number): number => {
+    if (categoria === 'cedear') {
+      const precioARS = precios[`${ticker}.BA`];
       if (precioARS && precioARS > 0) return precioARS;
-      const precioUSD = precios[pos.ticker];
+      const precioUSD = precios[ticker];
       if (precioUSD && precioUSD > 0) return precioUSD * ccl;
-      return pos.precio_compra;
+      return precio_compra;
     }
-    if (pos.categoria === 'byma') {
-      const precioARS = precios[`${pos.ticker}.BA`] ?? precios[pos.ticker];
-      return precioARS && precioARS > 0 ? precioARS : pos.precio_compra;
+    if (categoria === 'byma') {
+      const precioARS = precios[`${ticker}.BA`] ?? precios[ticker];
+      return precioARS && precioARS > 0 ? precioARS : precio_compra;
     }
-    return precios[pos.ticker] ?? pos.precio_compra;
+    return precios[ticker] ?? precio_compra;
   };
 
   const convertir = (valor: number, categoria: string): number => {
@@ -402,8 +440,11 @@ export default function Cartera() {
     return null;
   };
 
-  const totalInvertido = posiciones.reduce((s, p) => s + p.cantidad * convertir(p.precio_compra, p.categoria), 0);
-  const totalActual = posiciones.reduce((s, p) => s + p.cantidad * convertir(getPrecioActual(p), p.categoria), 0);
+  const totalInvertido = posicionesAgrupadas.reduce((s, p) => s + p.cantidadTotal * convertir(p.ppc, p.categoria), 0);
+  const totalActual = posicionesAgrupadas.reduce((s, p) => {
+    const precioActual = getPrecioActual(p.ticker, p.categoria, p.ppc);
+    return s + p.cantidadTotal * convertir(precioActual, p.categoria);
+  }, 0);
   const ganancia = totalActual - totalInvertido;
   const gananciaPct = totalInvertido > 0 ? (ganancia / totalInvertido) * 100 : 0;
   const positivo = ganancia >= 0;
@@ -467,7 +508,7 @@ export default function Cartera() {
             </View>
             <View style={styles.tarjeta}>
               <Text style={styles.tarjetaLabel}>Activos</Text>
-              <Text style={[styles.tarjetaValor, { color: theme.blue }]}>{posiciones.length}</Text>
+              <Text style={[styles.tarjetaValor, { color: theme.blue }]}>{posicionesAgrupadas.length}</Text>
             </View>
             <View style={styles.tarjeta}>
               <Text style={styles.tarjetaLabel}>G/P</Text>
@@ -479,7 +520,7 @@ export default function Cartera() {
 
           <Text style={styles.seccionTitulo}>Mis Posiciones</Text>
 
-          {posiciones.length === 0 ? (
+          {posicionesAgrupadas.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyTexto}>No tenés posiciones todavía</Text>
               <TouchableOpacity style={styles.botonAgregarEmpty} onPress={() => setModalVisible(true)}>
@@ -488,29 +529,36 @@ export default function Cartera() {
             </View>
           ) : (
             <View style={styles.tabla}>
-              {posiciones.map((pos, i) => {
-                const precioActual = getPrecioActual(pos);
+              {posicionesAgrupadas.map((pos, i) => {
+                const precioActual = getPrecioActual(pos.ticker, pos.categoria, pos.ppc);
                 const precioConv = convertir(precioActual, pos.categoria);
-                const precioCompraConv = convertir(pos.precio_compra, pos.categoria);
-                const valorActual = pos.cantidad * precioConv;
-                const gp = valorActual - pos.cantidad * precioCompraConv;
-                const gpPct = pos.precio_compra > 0 ? ((precioActual - pos.precio_compra) / pos.precio_compra) * 100 : 0;
+                const ppcConv = convertir(pos.ppc, pos.categoria);
+                const valorActual = pos.cantidadTotal * precioConv;
+                const gp = valorActual - pos.cantidadTotal * ppcConv;
+                const gpPct = pos.ppc > 0 ? ((precioActual - pos.ppc) / pos.ppc) * 100 : 0;
                 const esPositivo = gp >= 0;
                 const cat = CATEGORIAS.find(c => c.id === pos.categoria);
                 const etiq = etiquetaOriginal(pos.categoria);
+                const tieneMultiples = pos.subPosiciones.length > 1;
                 return (
-                  <View key={pos.id} style={[styles.fila, i === posiciones.length - 1 && { borderBottomWidth: 0 }]}>
+                  <View key={pos.ticker} style={[styles.fila, i === posicionesAgrupadas.length - 1 && { borderBottomWidth: 0 }]}>
                     <View style={[styles.filaIcono, { backgroundColor: (cat?.color ?? theme.green) + '22' }]}>
                       <Text style={[styles.filaIconoTexto, { color: cat?.color ?? theme.green }]}>
                         {pos.ticker[0]}
                       </Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.filaTicker}>{pos.ticker}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.filaTicker}>{pos.ticker}</Text>
+                        {tieneMultiples && (
+                          <View style={styles.badgeMultiple}>
+                            <Text style={styles.badgeMultipleTexto}>{pos.subPosiciones.length} compras</Text>
+                          </View>
+                        )}
+                      </View>
                       <Text style={styles.filaNombre}>{pos.nombre}</Text>
                       <Text style={styles.filaCantidad}>
-                        {pos.cantidad} u. · P.compra $ {pos.precio_compra.toLocaleString('es-AR')}
-                        {pos.fecha_compra ? ` · ${fechaAInput(pos.fecha_compra)}` : ''}
+                        {pos.cantidadTotal} u. · PPC ${pos.ppc.toLocaleString('es-AR', { maximumFractionDigits: 2 })}
                       </Text>
                     </View>
                     <View style={{ alignItems: 'flex-end', marginRight: 8 }}>
@@ -520,7 +568,7 @@ export default function Cartera() {
                       </Text>
                       {etiq && <Text style={styles.etiqOriginal}>orig. {etiq}</Text>}
                     </View>
-                    <TouchableOpacity onPress={() => setMenuPos(pos)} style={styles.menuBoton}>
+                    <TouchableOpacity onPress={() => { setMenuPos(pos); setMenuSubPosVisible(false); }} style={styles.menuBoton}>
                       <Text style={styles.menuPuntos}>⋯</Text>
                     </TouchableOpacity>
                   </View>
@@ -530,14 +578,14 @@ export default function Cartera() {
           )}
 
           {/* ── MAPA DE CALOR DE CORRELACIÓN ── */}
-          {posiciones.length >= 2 && (
+          {posicionesAgrupadas.length >= 2 && (
             <View style={{ marginBottom: 20 }}>
               <TouchableOpacity
                 style={styles.mapaHeaderRow}
                 onPress={() => {
                   const nuevo = !mostrarMapa;
                   setMostrarMapa(nuevo);
-                  if (nuevo && correlaciones.length === 0) cargarCorrelaciones(posiciones);
+                  if (nuevo && correlaciones.length === 0) cargarCorrelaciones(posicionesAgrupadas);
                 }}>
                 <Text style={styles.seccionTitulo}>Correlación de activos 🔥</Text>
                 <Text style={styles.mapaToggle}>{mostrarMapa ? '▲' : '▼'}</Text>
@@ -554,7 +602,6 @@ export default function Cartera() {
                     <>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         <View>
-                          {/* Header columnas */}
                           <View style={{ flexDirection: 'row', marginLeft: CELL_SIZE }}>
                             {tickersCorrel.map(t => (
                               <View key={t} style={[styles.mapaHeaderCell, { width: CELL_SIZE }]}>
@@ -562,14 +609,13 @@ export default function Cartera() {
                               </View>
                             ))}
                           </View>
-                          {/* Filas */}
                           {correlaciones.map((fila, i) => (
-                            <View key={i} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <View key={tickersCorrel[i]} style={{ flexDirection: 'row', alignItems: 'center' }}>
                               <View style={[styles.mapaRowLabel, { width: CELL_SIZE }]}>
                                 <Text style={styles.mapaHeaderTexto} numberOfLines={1}>{tickersCorrel[i]}</Text>
                               </View>
                               {fila.map((val, j) => (
-                                <View key={j} style={[styles.mapaCell, {
+                                <View key={`${tickersCorrel[i]}-${tickersCorrel[j]}`} style={[styles.mapaCell, {
                                   width: CELL_SIZE,
                                   height: CELL_SIZE,
                                   backgroundColor: getCorrelColor(val),
@@ -589,7 +635,6 @@ export default function Cartera() {
                         </View>
                       </ScrollView>
 
-                      {/* Leyenda de fuentes */}
                       <View style={styles.mapaFuentesRow}>
                         {Object.entries(fuentesCorrel).map(([t, f]) => (
                           <View key={t} style={styles.mapaFuenteItem}>
@@ -602,7 +647,6 @@ export default function Cartera() {
                         🟢 Yahoo Finance (real) · 🟡 Estimado por categoría
                       </Text>
 
-                      {/* Leyenda colores */}
                       <View style={styles.mapaLeyendaRow}>
                         {[
                           { color: '#006633', label: 'Alta +' },
@@ -620,7 +664,7 @@ export default function Cartera() {
 
                       <TouchableOpacity
                         style={styles.mapaRefreshBoton}
-                        onPress={() => { setCorrelaciones([]); cargarCorrelaciones(posiciones); }}>
+                        onPress={() => { setCorrelaciones([]); cargarCorrelaciones(posicionesAgrupadas); }}>
                         <Text style={styles.mapaRefreshTexto}>↻ Recalcular</Text>
                       </TouchableOpacity>
                     </>
@@ -724,6 +768,11 @@ export default function Cartera() {
                     <Text style={styles.modalCerrar}>✕</Text>
                   </TouchableOpacity>
                 </View>
+                {posEditando?.fecha_compra && (
+                  <Text style={[styles.inputLabel, { marginBottom: 12, color: theme.gray }]}>
+                    📅 Compra del {fechaAInput(posEditando.fecha_compra)}
+                  </Text>
+                )}
                 <TextInput style={styles.input} placeholder="Nombre" placeholderTextColor={theme.gray}
                   value={editNombre} onChangeText={setEditNombre} returnKeyType="next"
                   onSubmitEditing={() => refEditCantidad.current?.focus()} blurOnSubmit={false} />
@@ -764,26 +813,63 @@ export default function Cartera() {
 
       {/* MODAL MENU */}
       <Modal visible={!!menuPos} animationType="fade" transparent>
-        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuPos(null)}>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => { setMenuPos(null); setMenuSubPosVisible(false); }}>
           <View style={styles.menuContainer}>
             <Text style={styles.menuTicker}>{menuPos?.ticker}</Text>
             <Text style={styles.menuNombre}>{menuPos?.nombre}</Text>
-            <TouchableOpacity style={styles.menuOpcion} onPress={() => menuPos && abrirEditar(menuPos)}>
-              <Text style={styles.menuOpcionIcono}>✏️</Text>
-              <Text style={styles.menuOpcionTexto}>Modificar datos</Text>
-              <Text style={styles.menuOpcionFlecha}>›</Text>
-            </TouchableOpacity>
+
+            {/* Si tiene múltiples compras, mostrar sub-posiciones para editar/eliminar */}
+            {menuPos && menuPos.subPosiciones.length > 1 && (
+              <TouchableOpacity
+                style={[styles.menuOpcion, { marginBottom: 4 }]}
+                onPress={() => setMenuSubPosVisible(!menuSubPosVisible)}>
+                <Text style={styles.menuOpcionIcono}>📋</Text>
+                <Text style={styles.menuOpcionTexto}>
+                  {menuSubPosVisible ? 'Ocultar compras' : `Ver ${menuPos.subPosiciones.length} compras`}
+                </Text>
+                <Text style={styles.menuOpcionFlecha}>{menuSubPosVisible ? '▲' : '▼'}</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Sub-posiciones expandidas */}
+            {menuSubPosVisible && menuPos && menuPos.subPosiciones.map((sub, idx) => (
+              <View key={sub.id} style={styles.subPosContainer}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.subPosTexto}>
+                    {sub.cantidad} u. · ${sub.precio_compra.toLocaleString('es-AR')}
+                  </Text>
+                  <Text style={styles.subPosFecha}>{fechaAInput(sub.fecha_compra)}</Text>
+                </View>
+                <TouchableOpacity onPress={() => abrirEditar(sub)} style={styles.subPosBoton}>
+                  <Text style={{ color: theme.blue, fontSize: 12, fontWeight: '600' }}>Editar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => eliminarPosicion(sub)} style={styles.subPosBoton}>
+                  <Text style={{ color: theme.red, fontSize: 12, fontWeight: '600' }}>Eliminar</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            {/* Para posición única: opciones normales */}
+            {menuPos && menuPos.subPosiciones.length === 1 && (
+              <TouchableOpacity style={styles.menuOpcion} onPress={() => abrirEditar(menuPos.subPosiciones[0])}>
+                <Text style={styles.menuOpcionIcono}>✏️</Text>
+                <Text style={styles.menuOpcionTexto}>Modificar datos</Text>
+                <Text style={styles.menuOpcionFlecha}>›</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity style={styles.menuOpcion} onPress={() => {
-              const precioActual = getPrecioActual(menuPos!);
-              const gpPct = menuPos!.precio_compra > 0 ? ((precioActual - menuPos!.precio_compra) / menuPos!.precio_compra) * 100 : 0;
+              const precioActual = getPrecioActual(menuPos!.ticker, menuPos!.categoria, menuPos!.ppc);
+              const gpPct = menuPos!.ppc > 0 ? ((precioActual - menuPos!.ppc) / menuPos!.ppc) * 100 : 0;
               setMenuPos(null);
+              setMenuSubPosVisible(false);
               router.push({
                 pathname: '/detalle',
                 params: {
                   ticker: menuPos!.ticker, nombre: menuPos!.nombre,
                   precioActual: precioActual.toString(), gpPct: gpPct.toString(),
-                  categoria: menuPos!.categoria, cantidad: menuPos!.cantidad.toString(),
-                  precioCompra: menuPos!.precio_compra.toString(),
+                  categoria: menuPos!.categoria, cantidad: menuPos!.cantidadTotal.toString(),
+                  precioCompra: menuPos!.ppc.toString(),
                 }
               });
             }}>
@@ -791,12 +877,17 @@ export default function Cartera() {
               <Text style={styles.menuOpcionTexto}>Ver rendimiento</Text>
               <Text style={styles.menuOpcionFlecha}>›</Text>
             </TouchableOpacity>
-            <View style={styles.menuDivider} />
-            <TouchableOpacity style={styles.menuOpcion} onPress={() => menuPos && eliminarPosicion(menuPos)}>
-              <Text style={styles.menuOpcionIcono}>🗑️</Text>
-              <Text style={[styles.menuOpcionTexto, { color: theme.red }]}>Eliminar posición</Text>
-              <Text style={styles.menuOpcionFlecha}>›</Text>
-            </TouchableOpacity>
+
+            {menuPos && menuPos.subPosiciones.length === 1 && (
+              <>
+                <View style={styles.menuDivider} />
+                <TouchableOpacity style={styles.menuOpcion} onPress={() => eliminarPosicion(menuPos.subPosiciones[0])}>
+                  <Text style={styles.menuOpcionIcono}>🗑️</Text>
+                  <Text style={[styles.menuOpcionTexto, { color: theme.red }]}>Eliminar posición</Text>
+                  <Text style={styles.menuOpcionFlecha}>›</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </TouchableOpacity>
       </Modal>
@@ -844,6 +935,13 @@ const getStyles = (theme: any) => StyleSheet.create({
   etiqOriginal: { color: theme.gray, fontSize: 9, marginTop: 1 },
   menuBoton: { padding: 8 },
   menuPuntos: { color: theme.gray, fontSize: 20, fontWeight: '700' },
+  badgeMultiple: { backgroundColor: theme.card2, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: theme.border },
+  badgeMultipleTexto: { color: theme.gray, fontSize: 9, fontWeight: '600' },
+  // Sub-posiciones en menú
+  subPosContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.card2, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 4 },
+  subPosTexto: { color: theme.white, fontSize: 12, fontWeight: '600' },
+  subPosFecha: { color: theme.gray, fontSize: 10, marginTop: 2 },
+  subPosBoton: { paddingHorizontal: 8, paddingVertical: 4 },
   // ── Mapa de calor ──
   mapaHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingRight: 20 },
   mapaToggle: { color: theme.gray, fontSize: 14, paddingBottom: 12 },

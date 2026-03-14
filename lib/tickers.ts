@@ -6,7 +6,7 @@ export type TickerSugerido = {
 };
 
 export const TICKERS_CONOCIDOS: TickerSugerido[] = [
-  // CEDEARs
+  // CEDEARs — Acciones
   { ticker: 'AAPL', nombre: 'Apple Inc.', categoria: 'cedear', moneda: 'ARS' },
   { ticker: 'GOOGL', nombre: 'Alphabet (Google)', categoria: 'cedear', moneda: 'ARS' },
   { ticker: 'MSFT', nombre: 'Microsoft Corp.', categoria: 'cedear', moneda: 'ARS' },
@@ -37,6 +37,54 @@ export const TICKERS_CONOCIDOS: TickerSugerido[] = [
   { ticker: 'PEP', nombre: 'PepsiCo Inc.', categoria: 'cedear', moneda: 'ARS' },
   { ticker: 'MCD', nombre: "McDonald's Corp.", categoria: 'cedear', moneda: 'ARS' },
   { ticker: 'NKE', nombre: 'Nike Inc.', categoria: 'cedear', moneda: 'ARS' },
+
+  // CEDEARs — ETFs S&P 500 / Índices amplios
+  { ticker: 'SPY', nombre: 'SPDR S&P 500 ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'IVV', nombre: 'iShares Core S&P 500 ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'VOO', nombre: 'Vanguard S&P 500 ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'QQQ', nombre: 'Invesco Nasdaq 100 ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'DIA', nombre: 'SPDR Dow Jones ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'IWM', nombre: 'iShares Russell 2000 ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'VTI', nombre: 'Vanguard Total Stock Market ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'ACWI', nombre: 'iShares MSCI ACWI ETF', categoria: 'cedear', moneda: 'ARS' },
+
+  // CEDEARs — ETFs Internacionales
+  { ticker: 'EEM', nombre: 'iShares MSCI Emerging Markets ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'IEMG', nombre: 'iShares Core MSCI Emerging Markets ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'EFA', nombre: 'iShares MSCI EAFE ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'IEUR', nombre: 'iShares Core MSCI Europe ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'EWJ', nombre: 'iShares MSCI Japan ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'EWZ', nombre: 'iShares MSCI Brazil ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'FXI', nombre: 'iShares China Large-Cap ETF', categoria: 'cedear', moneda: 'ARS' },
+
+  // CEDEARs — ETFs Sectoriales
+  { ticker: 'XLE', nombre: 'Energy Select Sector SPDR ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'XLF', nombre: 'Financial Select Sector SPDR ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'XLK', nombre: 'Technology Select Sector SPDR ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'XLV', nombre: 'Health Care Select Sector SPDR ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'XLI', nombre: 'Industrial Select Sector SPDR ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'ARKK', nombre: 'ARK Innovation ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'IBB', nombre: 'iShares Nasdaq Biotechnology ETF', categoria: 'cedear', moneda: 'ARS' },
+
+  // CEDEARs — ETFs Metales / Commodities
+  { ticker: 'GLD', nombre: 'SPDR Gold Shares ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'SLV', nombre: 'iShares Silver Trust ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'GDX', nombre: 'VanEck Gold Miners ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'USO', nombre: 'United States Oil Fund ETF', categoria: 'cedear', moneda: 'ARS' },
+
+  // CEDEARs — ETFs Crypto
+  { ticker: 'IBIT', nombre: 'iShares Bitcoin Trust ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'ETHA', nombre: 'iShares Ethereum Trust ETF', categoria: 'cedear', moneda: 'ARS' },
+
+  // CEDEARs — ETFs Dividendos / Otros
+  { ticker: 'VIG', nombre: 'Vanguard Dividend Appreciation ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'IJH', nombre: 'iShares Core S&P Mid-Cap ETF', categoria: 'cedear', moneda: 'ARS' },
+
+  // CEDEARs — ETFs Inversos
+  { ticker: 'SH', nombre: 'ProShares Short S&P 500 ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'PSQ', nombre: 'ProShares Short QQQ ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'SDS', nombre: 'ProShares UltraShort S&P 500 ETF', categoria: 'cedear', moneda: 'ARS' },
+  { ticker: 'QID', nombre: 'ProShares UltraShort QQQ ETF', categoria: 'cedear', moneda: 'ARS' },
 
   // BYMA
   { ticker: 'GGAL', nombre: 'Grupo Financiero Galicia', categoria: 'byma', moneda: 'ARS' },
@@ -83,9 +131,16 @@ export const TICKERS_CONOCIDOS: TickerSugerido[] = [
   { ticker: 'GD41', nombre: 'Global 2041', categoria: 'bono_usd', moneda: 'USD' },
   { ticker: 'GD46', nombre: 'Global 2046', categoria: 'bono_usd', moneda: 'USD' },
 
-  // Bonos ARS
+  // Bonos ARS / CER
   { ticker: 'TX26', nombre: 'Boncer 2026', categoria: 'bono_ars', moneda: 'ARS' },
+  { ticker: 'TX27', nombre: 'Boncer 2027', categoria: 'bono_ars', moneda: 'ARS' },
   { ticker: 'TX28', nombre: 'Boncer 2028', categoria: 'bono_ars', moneda: 'ARS' },
+  { ticker: 'TX29', nombre: 'Boncer 2029', categoria: 'bono_ars', moneda: 'ARS' },
+  { ticker: 'TX30', nombre: 'Boncer 2030', categoria: 'bono_ars', moneda: 'ARS' },
+  { ticker: 'DICP', nombre: 'DICP - Discount en Pesos', categoria: 'bono_ars', moneda: 'ARS' },
+  { ticker: 'PARP', nombre: 'PARP - Par en Pesos', categoria: 'bono_ars', moneda: 'ARS' },
+  { ticker: 'CUAP', nombre: 'CUAP - Cuasi Par', categoria: 'bono_ars', moneda: 'ARS' },
+  { ticker: 'PR13', nombre: 'PR13 - Préstamos Garantizados', categoria: 'bono_ars', moneda: 'ARS' },
   { ticker: 'TZXD5', nombre: 'Bono Dollar-Linked Dic 2025', categoria: 'bono_ars', moneda: 'ARS' },
 
   // Letras
