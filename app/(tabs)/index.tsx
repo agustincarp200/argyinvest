@@ -4,6 +4,7 @@ import { buscarTickers, COLORES_CATEGORIA, type TickerSugerido } from '@/lib/tic
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Posicion = {
   id: string;
@@ -22,7 +23,7 @@ type PosicionAgrupada = {
   categoria: string;
   moneda: string;
   cantidadTotal: number;
-  ppc: number; // precio promedio ponderado de compra
+  ppc: number;
   subPosiciones: Posicion[];
 };
 
@@ -41,7 +42,6 @@ const CATEGORIAS = [
 const CATS_USD = ['nasdaq', 'crypto', 'bono_usd'];
 const CATS_ARS = ['byma', 'bono_ars', 'letra', 'fci', 'on'];
 
-// ── CORRELACIÓN POR CATEGORÍA (fallback) ─────────────
 const CORREL_CATEGORIAS: Record<string, Record<string, number>> = {
   cedear:   { cedear: 1.00, nasdaq: 0.85, byma: 0.55, crypto: 0.25, bono_ars: -0.10, bono_usd: 0.20, letra: -0.05, on: 0.10, fci: 0.05 },
   nasdaq:   { cedear: 0.85, nasdaq: 1.00, byma: 0.50, crypto: 0.30, bono_ars: -0.15, bono_usd: 0.25, letra: -0.05, on: 0.15, fci: 0.05 },
@@ -58,15 +58,7 @@ function agruparPosiciones(posiciones: Posicion[]): PosicionAgrupada[] {
   const mapa: Record<string, PosicionAgrupada> = {};
   for (const pos of posiciones) {
     if (!mapa[pos.ticker]) {
-      mapa[pos.ticker] = {
-        ticker: pos.ticker,
-        nombre: pos.nombre,
-        categoria: pos.categoria,
-        moneda: pos.moneda,
-        cantidadTotal: 0,
-        ppc: 0,
-        subPosiciones: [],
-      };
+      mapa[pos.ticker] = { ticker: pos.ticker, nombre: pos.nombre, categoria: pos.categoria, moneda: pos.moneda, cantidadTotal: 0, ppc: 0, subPosiciones: [] };
     }
     const g = mapa[pos.ticker];
     const totalAnterior = g.cantidadTotal * g.ppc;
@@ -80,17 +72,13 @@ function agruparPosiciones(posiciones: Posicion[]): PosicionAgrupada[] {
 function pearsonCorrelation(x: number[], y: number[]): number {
   const n = Math.min(x.length, y.length);
   if (n < 5) return NaN;
-  const xs = x.slice(0, n);
-  const ys = y.slice(0, n);
+  const xs = x.slice(0, n); const ys = y.slice(0, n);
   const meanX = xs.reduce((a, b) => a + b, 0) / n;
   const meanY = ys.reduce((a, b) => a + b, 0) / n;
   let num = 0, denX = 0, denY = 0;
   for (let i = 0; i < n; i++) {
-    const dx = xs[i] - meanX;
-    const dy = ys[i] - meanY;
-    num += dx * dy;
-    denX += dx * dx;
-    denY += dy * dy;
+    const dx = xs[i] - meanX; const dy = ys[i] - meanY;
+    num += dx * dy; denX += dx * dx; denY += dy * dy;
   }
   const den = Math.sqrt(denX * denY);
   return den === 0 ? 0 : Math.max(-1, Math.min(1, num / den));
@@ -115,23 +103,17 @@ function getYFTickerFromAgrupada(pos: PosicionAgrupada): string {
 
 function getCorrelColor(val: number): string {
   if (isNaN(val)) return '#333333';
-  if (val >= 0.7)  return '#006633';
-  if (val >= 0.4)  return '#00A64F';
-  if (val >= 0.1)  return '#4DC98A';
-  if (val >= -0.1) return '#444444';
-  if (val >= -0.4) return '#C97A4D';
-  if (val >= -0.7) return '#D94F4F';
+  if (val >= 0.7) return '#006633'; if (val >= 0.4) return '#00A64F';
+  if (val >= 0.1) return '#4DC98A'; if (val >= -0.1) return '#444444';
+  if (val >= -0.4) return '#C97A4D'; if (val >= -0.7) return '#D94F4F';
   return '#AA0000';
 }
 
 function getCorrelLabel(val: number): string {
   if (isNaN(val)) return '—';
-  if (val >= 0.7)  return 'Alta ↑';
-  if (val >= 0.4)  return 'Mod ↑';
-  if (val >= 0.1)  return 'Baja ↑';
-  if (val >= -0.1) return 'Neutra';
-  if (val >= -0.4) return 'Baja ↓';
-  if (val >= -0.7) return 'Mod ↓';
+  if (val >= 0.7) return 'Alta ↑'; if (val >= 0.4) return 'Mod ↑';
+  if (val >= 0.1) return 'Baja ↑'; if (val >= -0.1) return 'Neutra';
+  if (val >= -0.4) return 'Baja ↓'; if (val >= -0.7) return 'Mod ↓';
   return 'Alta ↓';
 }
 
@@ -153,9 +135,11 @@ function formatearFechaInput(texto: string) {
   return r;
 }
 
-export default function Cartera() {
+export default function Inicio() {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = getStyles(theme);
+
   const [posiciones, setPosiciones] = useState<Posicion[]>([]);
   const [precios, setPrecios] = useState<Record<string, number>>({});
   const [cargando, setCargando] = useState(true);
@@ -166,7 +150,6 @@ export default function Cartera() {
   const [menuSubPosVisible, setMenuSubPosVisible] = useState(false);
   const [modoMoneda, setModoMoneda] = useState<'ARS' | 'USD'>('ARS');
 
-  // Correlación
   const [correlaciones, setCorrelaciones] = useState<number[][]>([]);
   const [tickersCorrel, setTickersCorrel] = useState<string[]>([]);
   const [cargandoCorrel, setCargandoCorrel] = useState(false);
@@ -197,10 +180,8 @@ export default function Cartera() {
   const refEditPrecio = useRef<TextInput>(null);
 
   useEffect(() => {
-    if (Platform.OS === 'android') {
-      if (UIManager.setLayoutAnimationEnabledExperimental) {
-        UIManager.setLayoutAnimationEnabledExperimental(true);
-      }
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
     }
     const show = Keyboard.addListener('keyboardWillShow', () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut));
     const hide = Keyboard.addListener('keyboardWillHide', () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut));
@@ -231,97 +212,50 @@ export default function Cartera() {
   async function cargarCorrelaciones(agrupadas: PosicionAgrupada[]) {
     if (agrupadas.length < 2) return;
     setCargandoCorrel(true);
-
-    // Máximo 8 activos ordenados por valor invertido
-    const activos = [...agrupadas]
-      .sort((a, b) => (b.cantidadTotal * b.ppc) - (a.cantidadTotal * a.ppc))
-      .slice(0, 8);
-
+    const activos = [...agrupadas].sort((a, b) => (b.cantidadTotal * b.ppc) - (a.cantidadTotal * a.ppc)).slice(0, 8);
     const retornosMap: Record<string, number[]> = {};
     const fuentes: Record<string, 'yahoo' | 'categoria'> = {};
-
     await Promise.all(activos.map(async (p) => {
       try {
         const yfTicker = getYFTickerFromAgrupada(p);
         const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${yfTicker}?interval=1d&range=3mo`);
         const json = await res.json();
-        const closes: number[] = (json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [])
-          .filter((v: any) => v !== null && v !== undefined && !isNaN(v));
-        if (closes.length >= 10) {
-          retornosMap[p.ticker] = calcularRetornos(closes);
-          fuentes[p.ticker] = 'yahoo';
-        } else {
-          fuentes[p.ticker] = 'categoria';
-        }
-      } catch {
-        fuentes[p.ticker] = 'categoria';
-      }
+        const closes: number[] = (json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter((v: any) => v !== null && !isNaN(v));
+        if (closes.length >= 10) { retornosMap[p.ticker] = calcularRetornos(closes); fuentes[p.ticker] = 'yahoo'; }
+        else fuentes[p.ticker] = 'categoria';
+      } catch { fuentes[p.ticker] = 'categoria'; }
     }));
-
     const tickers = activos.map(p => p.ticker);
     const n = tickers.length;
     const matriz: number[][] = Array.from({ length: n }, () => Array(n).fill(0));
-
-    for (let i = 0; i < n; i++) {
-      for (let j = 0; j < n; j++) {
-        if (i === j) { matriz[i][j] = 1.0; continue; }
-        const retI = retornosMap[tickers[i]];
-        const retJ = retornosMap[tickers[j]];
-        if (retI && retJ && retI.length >= 10 && retJ.length >= 10) {
-          matriz[i][j] = pearsonCorrelation(retI, retJ);
-        } else {
-          const catI = activos[i].categoria;
-          const catJ = activos[j].categoria;
-          matriz[i][j] = CORREL_CATEGORIAS[catI]?.[catJ] ?? 0;
-        }
-      }
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      if (i === j) { matriz[i][j] = 1.0; continue; }
+      const retI = retornosMap[tickers[i]]; const retJ = retornosMap[tickers[j]];
+      if (retI && retJ && retI.length >= 10 && retJ.length >= 10) matriz[i][j] = pearsonCorrelation(retI, retJ);
+      else matriz[i][j] = CORREL_CATEGORIAS[activos[i].categoria]?.[activos[j].categoria] ?? 0;
     }
-
-    setTickersCorrel(tickers);
-    setCorrelaciones(matriz);
-    setFuentesCorrel(fuentes);
+    setTickersCorrel(tickers); setCorrelaciones(matriz); setFuentesCorrel(fuentes);
     setCargandoCorrel(false);
   }
 
-  function onChangeTicker(t: string) {
-    const val = t.toUpperCase();
-    setTicker(val);
-    setSugerencias(buscarTickers(val));
-  }
-
+  function onChangeTicker(t: string) { const val = t.toUpperCase(); setTicker(val); setSugerencias(buscarTickers(val)); }
   function seleccionarSugerencia(s: TickerSugerido) {
-    setTicker(s.ticker);
-    setNombre(s.nombre);
-    setCategoriaSeleccionada(s.categoria);
-    setMoneda(s.moneda);
-    setSugerencias([]);
-    Keyboard.dismiss();
+    setTicker(s.ticker); setNombre(s.nombre); setCategoriaSeleccionada(s.categoria); setMoneda(s.moneda);
+    setSugerencias([]); Keyboard.dismiss();
   }
 
   function abrirEditar(pos: Posicion) {
-    setPosEditando(pos);
-    setEditNombre(pos.nombre);
-    setEditCantidad(pos.cantidad.toString());
-    setEditPrecioCompra(pos.precio_compra.toString());
-    setEditCategoria(pos.categoria);
-    setEditMoneda(pos.moneda);
-    setMenuPos(null);
-    setMenuSubPosVisible(false);
-    setModalEditarVisible(true);
+    setPosEditando(pos); setEditNombre(pos.nombre); setEditCantidad(pos.cantidad.toString());
+    setEditPrecioCompra(pos.precio_compra.toString()); setEditCategoria(pos.categoria); setEditMoneda(pos.moneda);
+    setMenuPos(null); setMenuSubPosVisible(false); setModalEditarVisible(true);
   }
 
   async function guardarEdicion() {
-    if (!editCantidad || !editPrecioCompra) {
-      Alert.alert('Error', 'Completá cantidad y precio de compra');
-      return;
-    }
+    if (!editCantidad || !editPrecioCompra) { Alert.alert('Error', 'Completá cantidad y precio de compra'); return; }
     setGuardando(true);
     const { error } = await supabase.from('posiciones').update({
-      nombre: editNombre || posEditando!.ticker,
-      cantidad: parseFloat(editCantidad),
-      precio_compra: parseFloat(editPrecioCompra),
-      categoria: editCategoria,
-      moneda: editMoneda,
+      nombre: editNombre || posEditando!.ticker, cantidad: parseFloat(editCantidad),
+      precio_compra: parseFloat(editPrecioCompra), categoria: editCategoria, moneda: editMoneda,
     }).eq('id', posEditando!.id);
     if (error) Alert.alert('Error', error.message);
     else { setModalEditarVisible(false); cargarDatos(); }
@@ -329,77 +263,42 @@ export default function Cartera() {
   }
 
   async function agregarPosicion() {
-    if (!ticker || !cantidad || !precioCompra) {
-      Alert.alert('Error', 'Completá ticker, cantidad y precio de compra');
-      return;
-    }
+    if (!ticker || !cantidad || !precioCompra) { Alert.alert('Error', 'Completá ticker, cantidad y precio de compra'); return; }
     const fechaISO = inputAFecha(fechaCompra);
-    if (!fechaISO) {
-      Alert.alert('Error', 'Fecha inválida. Usá el formato DD/MM/AAAA');
-      return;
-    }
+    if (!fechaISO) { Alert.alert('Error', 'Fecha inválida. Usá el formato DD/MM/AAAA'); return; }
     setGuardando(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setGuardando(false); return; }
-
     const { error } = await supabase.from('posiciones').insert({
-      usuario_id: user.id,
-      ticker: ticker.toUpperCase(),
-      nombre: nombre || ticker.toUpperCase(),
-      categoria: categoriaSeleccionada,
-      cantidad: parseFloat(cantidad),
-      precio_compra: parseFloat(precioCompra),
-      moneda,
-      fecha_compra: fechaISO,
+      usuario_id: user.id, ticker: ticker.toUpperCase(), nombre: nombre || ticker.toUpperCase(),
+      categoria: categoriaSeleccionada, cantidad: parseFloat(cantidad),
+      precio_compra: parseFloat(precioCompra), moneda, fecha_compra: fechaISO,
     });
-
     if (!error) {
       const tipoOp = categoriaSeleccionada === 'fci' ? 'SUSCRIPCION_FCI' : 'COMPRA';
       await supabase.from('operaciones').insert({
-        usuario_id: user.id,
-        ticker: ticker.toUpperCase(),
-        tipo: tipoOp,
-        cantidad: parseFloat(cantidad),
-        precio: parseFloat(precioCompra),
-        comision: 0,
-        moneda,
-        fecha: fechaISO,
-        notas: 'Agregado desde cartera',
+        usuario_id: user.id, ticker: ticker.toUpperCase(), tipo: tipoOp,
+        cantidad: parseFloat(cantidad), precio: parseFloat(precioCompra),
+        comision: 0, moneda, fecha: fechaISO, notas: 'Agregado desde cartera',
       });
       setModalVisible(false);
       setTicker(''); setNombre(''); setCantidad(''); setPrecioCompra('');
       setFechaCompra(fechaAInput(new Date().toISOString().split('T')[0]));
-      setSugerencias([]);
-      setCorrelaciones([]);
-      cargarDatos();
-    } else {
-      Alert.alert('Error', error.message);
-    }
+      setSugerencias([]); setCorrelaciones([]); cargarDatos();
+    } else Alert.alert('Error', error.message);
     setGuardando(false);
   }
 
   async function eliminarPosicion(pos: Posicion) {
-    setMenuPos(null);
-    setMenuSubPosVisible(false);
-    Alert.alert(
-      'Eliminar posición',
-      `¿Eliminar ${pos.ticker} (${pos.cantidad} u. · $${pos.precio_compra.toLocaleString('es-AR')} · ${fechaAInput(pos.fecha_compra)})?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar', style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase.from('posiciones').delete().eq('id', pos.id);
-            if (error) Alert.alert('Error', error.message);
-            else {
-              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-              setCorrelaciones([]);
-              cargarDatos();
-            }
-          }
-        }
-      ]
-    );
+    setMenuPos(null); setMenuSubPosVisible(false);
+    Alert.alert('Eliminar posición', `¿Eliminar ${pos.ticker} (${pos.cantidad} u.)?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Eliminar', style: 'destructive', onPress: async () => {
+        const { error } = await supabase.from('posiciones').delete().eq('id', pos.id);
+        if (error) Alert.alert('Error', error.message);
+        else { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setCorrelaciones([]); cargarDatos(); }
+      }}
+    ]);
   }
 
   const ccl = precios['CCL'] ?? 1285;
@@ -441,47 +340,38 @@ export default function Cartera() {
   };
 
   const totalInvertido = posicionesAgrupadas.reduce((s, p) => s + p.cantidadTotal * convertir(p.ppc, p.categoria), 0);
-  const totalActual = posicionesAgrupadas.reduce((s, p) => {
-    const precioActual = getPrecioActual(p.ticker, p.categoria, p.ppc);
-    return s + p.cantidadTotal * convertir(precioActual, p.categoria);
-  }, 0);
+  const totalActual = posicionesAgrupadas.reduce((s, p) => s + p.cantidadTotal * convertir(getPrecioActual(p.ticker, p.categoria, p.ppc), p.categoria), 0);
   const ganancia = totalActual - totalInvertido;
   const gananciaPct = totalInvertido > 0 ? (ganancia / totalInvertido) * 100 : 0;
   const positivo = ganancia >= 0;
-
   const CELL_SIZE = 52;
 
   return (
     <ScrollView style={styles.container}>
 
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.saludo}>Mi Cartera 💼</Text>
-          <Text style={styles.appNombre}>A Contar</Text>
-        </View>
+      {/* ── HEADER con perfil integrado ── */}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <Text style={styles.appNombre}>Inicio 🏠</Text>
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <View style={styles.toggleMoneda}>
-            <TouchableOpacity
-              style={[styles.toggleBtn, modoMoneda === 'ARS' && { backgroundColor: theme.gold }]}
-              onPress={() => setModoMoneda('ARS')}>
+            <TouchableOpacity style={[styles.toggleBtn, modoMoneda === 'ARS' && { backgroundColor: theme.gold }]} onPress={() => setModoMoneda('ARS')}>
               <Text style={[styles.toggleBtnTexto, modoMoneda === 'ARS' && { color: '#000' }]}>ARS</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.toggleBtn, modoMoneda === 'USD' && { backgroundColor: theme.green }]}
-              onPress={() => setModoMoneda('USD')}>
+            <TouchableOpacity style={[styles.toggleBtn, modoMoneda === 'USD' && { backgroundColor: theme.green }]} onPress={() => setModoMoneda('USD')}>
               <Text style={[styles.toggleBtnTexto, modoMoneda === 'USD' && { color: '#000' }]}>USD</Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity style={styles.botonAgregar} onPress={() => setModalVisible(true)}>
             <Text style={styles.botonAgregarTexto}>+ Agregar</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.perfilBoton} onPress={() => router.push('/perfil')}>
+            <Text style={{ fontSize: 16 }}>👤</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
       {cargando ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.green} />
-        </View>
+        <View style={styles.loadingContainer}><ActivityIndicator size="large" color={theme.green} /></View>
       ) : (
         <>
           <View style={styles.totalContainer}>
@@ -489,36 +379,28 @@ export default function Cartera() {
             <Text style={styles.totalValor}>{formatVal(totalActual)}</Text>
             <View style={[styles.variacionBadge, { backgroundColor: positivo ? theme.greenDim : theme.redDim }]}>
               <Text style={[styles.variacionTexto, { color: positivo ? theme.green : theme.red }]}>
-                {positivo ? '+' : ''}{gananciaPct.toFixed(2)}%
-                {'  '}({positivo ? '+' : ''}{formatVal(Math.abs(ganancia))})
+                {positivo ? '+' : ''}{gananciaPct.toFixed(2)}%{'  '}({positivo ? '+' : ''}{formatVal(Math.abs(ganancia))})
               </Text>
             </View>
-            {modoMoneda === 'USD' && (
-              <Text style={styles.cclTexto}>CCL: ${ccl.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</Text>
-            )}
+            {modoMoneda === 'USD' && <Text style={styles.cclTexto}>CCL: ${ccl.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</Text>}
             <TouchableOpacity style={styles.verRendimientoBoton} onPress={() => router.push('/rendimiento')}>
               <Text style={styles.verRendimientoTexto}>Ver rendimiento →</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.tarjetasRow}>
-            <View style={styles.tarjeta}>
-              <Text style={styles.tarjetaLabel}>Invertido</Text>
-              <Text style={styles.tarjetaValor} numberOfLines={1}>{formatVal(totalInvertido)}</Text>
-            </View>
-            <View style={styles.tarjeta}>
-              <Text style={styles.tarjetaLabel}>Activos</Text>
-              <Text style={[styles.tarjetaValor, { color: theme.blue }]}>{posicionesAgrupadas.length}</Text>
-            </View>
-            <View style={styles.tarjeta}>
-              <Text style={styles.tarjetaLabel}>G/P</Text>
-              <Text style={[styles.tarjetaValor, { color: positivo ? theme.green : theme.red }]} numberOfLines={1}>
-                {positivo ? '+' : ''}{formatVal(Math.abs(ganancia))}
-              </Text>
-            </View>
+            <View style={styles.tarjeta}><Text style={styles.tarjetaLabel}>Invertido</Text><Text style={styles.tarjetaValor} numberOfLines={1}>{formatVal(totalInvertido)}</Text></View>
+            <View style={styles.tarjeta}><Text style={styles.tarjetaLabel}>Activos</Text><Text style={[styles.tarjetaValor, { color: theme.blue }]}>{posicionesAgrupadas.length}</Text></View>
+            <View style={styles.tarjeta}><Text style={styles.tarjetaLabel}>G/P</Text><Text style={[styles.tarjetaValor, { color: positivo ? theme.green : theme.red }]} numberOfLines={1}>{positivo ? '+' : ''}{formatVal(Math.abs(ganancia))}</Text></View>
           </View>
 
-          <Text style={styles.seccionTitulo}>Mis Posiciones</Text>
+          {/* ── Mis Activos ── */}
+          <View style={styles.seccionHeaderRow}>
+            <Text style={styles.seccionTituloInline}>Mis Activos</Text>
+            <TouchableOpacity style={styles.seccionBotonPlus} onPress={() => setModalVisible(true)}>
+              <Text style={styles.seccionBotonPlusTexto}>+</Text>
+            </TouchableOpacity>
+          </View>
 
           {posicionesAgrupadas.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -539,33 +421,19 @@ export default function Cartera() {
                 const esPositivo = gp >= 0;
                 const cat = CATEGORIAS.find(c => c.id === pos.categoria);
                 const etiq = etiquetaOriginal(pos.categoria);
-                const tieneMultiples = pos.subPosiciones.length > 1;
                 return (
                   <View key={pos.ticker} style={[styles.fila, i === posicionesAgrupadas.length - 1 && { borderBottomWidth: 0 }]}>
                     <View style={[styles.filaIcono, { backgroundColor: (cat?.color ?? theme.green) + '22' }]}>
-                      <Text style={[styles.filaIconoTexto, { color: cat?.color ?? theme.green }]}>
-                        {pos.ticker[0]}
-                      </Text>
+                      <Text style={[styles.filaIconoTexto, { color: cat?.color ?? theme.green }]}>{pos.ticker[0]}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={styles.filaTicker}>{pos.ticker}</Text>
-                        {tieneMultiples && (
-                          <View style={styles.badgeMultiple}>
-                            <Text style={styles.badgeMultipleTexto}>{pos.subPosiciones.length} compras</Text>
-                          </View>
-                        )}
-                      </View>
+                      <Text style={styles.filaTicker}>{pos.ticker}</Text>
                       <Text style={styles.filaNombre}>{pos.nombre}</Text>
-                      <Text style={styles.filaCantidad}>
-                        {pos.cantidadTotal} u. · PPC ${pos.ppc.toLocaleString('es-AR', { maximumFractionDigits: 2 })}
-                      </Text>
+                      <Text style={styles.filaCantidad}>{pos.cantidadTotal} u. · PPC ${pos.ppc.toLocaleString('es-AR', { maximumFractionDigits: 2 })}</Text>
                     </View>
                     <View style={{ alignItems: 'flex-end', marginRight: 8 }}>
                       <Text style={styles.filaValor}>{formatVal(valorActual)}</Text>
-                      <Text style={[styles.filaGP, { color: esPositivo ? theme.green : theme.red }]}>
-                        {esPositivo ? '+' : ''}{gpPct.toFixed(2)}%
-                      </Text>
+                      <Text style={[styles.filaGP, { color: esPositivo ? theme.green : theme.red }]}>{esPositivo ? '+' : ''}{gpPct.toFixed(2)}%</Text>
                       {etiq && <Text style={styles.etiqOriginal}>orig. {etiq}</Text>}
                     </View>
                     <TouchableOpacity onPress={() => { setMenuPos(pos); setMenuSubPosVisible(false); }} style={styles.menuBoton}>
@@ -577,64 +445,40 @@ export default function Cartera() {
             </View>
           )}
 
-          {/* ── MAPA DE CALOR DE CORRELACIÓN ── */}
+          {/* ── Correlación ── */}
           {posicionesAgrupadas.length >= 2 && (
             <View style={{ marginBottom: 20 }}>
-              <TouchableOpacity
-                style={styles.mapaHeaderRow}
-                onPress={() => {
-                  const nuevo = !mostrarMapa;
-                  setMostrarMapa(nuevo);
-                  if (nuevo && correlaciones.length === 0) cargarCorrelaciones(posicionesAgrupadas);
-                }}>
+              <TouchableOpacity style={styles.mapaHeaderRow} onPress={() => {
+                const nuevo = !mostrarMapa; setMostrarMapa(nuevo);
+                if (nuevo && correlaciones.length === 0) cargarCorrelaciones(posicionesAgrupadas);
+              }}>
                 <Text style={styles.seccionTitulo}>Correlación de activos 🔥</Text>
                 <Text style={styles.mapaToggle}>{mostrarMapa ? '▲' : '▼'}</Text>
               </TouchableOpacity>
-
               {mostrarMapa && (
                 <View style={styles.mapaContainer}>
                   {cargandoCorrel ? (
-                    <View style={styles.mapaLoading}>
-                      <ActivityIndicator size="small" color={theme.green} />
-                      <Text style={styles.mapaLoadingTexto}>Calculando correlaciones...</Text>
-                    </View>
+                    <View style={styles.mapaLoading}><ActivityIndicator size="small" color={theme.green} /><Text style={styles.mapaLoadingTexto}>Calculando correlaciones...</Text></View>
                   ) : correlaciones.length > 0 ? (
                     <>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         <View>
                           <View style={{ flexDirection: 'row', marginLeft: CELL_SIZE }}>
-                            {tickersCorrel.map(t => (
-                              <View key={t} style={[styles.mapaHeaderCell, { width: CELL_SIZE }]}>
-                                <Text style={styles.mapaHeaderTexto} numberOfLines={1}>{t}</Text>
-                              </View>
-                            ))}
+                            {tickersCorrel.map(t => (<View key={t} style={[styles.mapaHeaderCell, { width: CELL_SIZE }]}><Text style={styles.mapaHeaderTexto} numberOfLines={1}>{t}</Text></View>))}
                           </View>
                           {correlaciones.map((fila, i) => (
                             <View key={tickersCorrel[i]} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <View style={[styles.mapaRowLabel, { width: CELL_SIZE }]}>
-                                <Text style={styles.mapaHeaderTexto} numberOfLines={1}>{tickersCorrel[i]}</Text>
-                              </View>
+                              <View style={[styles.mapaRowLabel, { width: CELL_SIZE }]}><Text style={styles.mapaHeaderTexto} numberOfLines={1}>{tickersCorrel[i]}</Text></View>
                               {fila.map((val, j) => (
-                                <View key={`${tickersCorrel[i]}-${tickersCorrel[j]}`} style={[styles.mapaCell, {
-                                  width: CELL_SIZE,
-                                  height: CELL_SIZE,
-                                  backgroundColor: getCorrelColor(val),
-                                  borderColor: i === j ? '#FFFFFF44' : 'transparent',
-                                  borderWidth: i === j ? 1 : 0,
-                                }]}>
-                                  <Text style={styles.mapaCellValor}>
-                                    {isNaN(val) ? '—' : val.toFixed(2)}
-                                  </Text>
-                                  {i !== j && (
-                                    <Text style={styles.mapaCellLabel}>{getCorrelLabel(val)}</Text>
-                                  )}
+                                <View key={`${tickersCorrel[i]}-${tickersCorrel[j]}`} style={[styles.mapaCell, { width: CELL_SIZE, height: CELL_SIZE, backgroundColor: getCorrelColor(val), borderColor: i === j ? '#FFFFFF44' : 'transparent', borderWidth: i === j ? 1 : 0 }]}>
+                                  <Text style={styles.mapaCellValor}>{isNaN(val) ? '—' : val.toFixed(2)}</Text>
+                                  {i !== j && <Text style={styles.mapaCellLabel}>{getCorrelLabel(val)}</Text>}
                                 </View>
                               ))}
                             </View>
                           ))}
                         </View>
                       </ScrollView>
-
                       <View style={styles.mapaFuentesRow}>
                         {Object.entries(fuentesCorrel).map(([t, f]) => (
                           <View key={t} style={styles.mapaFuenteItem}>
@@ -643,34 +487,17 @@ export default function Cartera() {
                           </View>
                         ))}
                       </View>
-                      <Text style={styles.mapaFuenteNota}>
-                        🟢 Yahoo Finance (real) · 🟡 Estimado por categoría
-                      </Text>
-
+                      <Text style={styles.mapaFuenteNota}>🟢 Yahoo Finance (real) · 🟡 Estimado por categoría</Text>
                       <View style={styles.mapaLeyendaRow}>
-                        {[
-                          { color: '#006633', label: 'Alta +' },
-                          { color: '#4DC98A', label: 'Baja +' },
-                          { color: '#444444', label: 'Neutra' },
-                          { color: '#C97A4D', label: 'Baja −' },
-                          { color: '#AA0000', label: 'Alta −' },
-                        ].map(({ color, label }) => (
-                          <View key={label} style={styles.mapaLeyendaItem}>
-                            <View style={[styles.mapaLeyendaDot, { backgroundColor: color }]} />
-                            <Text style={styles.mapaLeyendaTexto}>{label}</Text>
-                          </View>
+                        {[{ color: '#006633', label: 'Alta +' }, { color: '#4DC98A', label: 'Baja +' }, { color: '#444444', label: 'Neutra' }, { color: '#C97A4D', label: 'Baja −' }, { color: '#AA0000', label: 'Alta −' }].map(({ color, label }) => (
+                          <View key={label} style={styles.mapaLeyendaItem}><View style={[styles.mapaLeyendaDot, { backgroundColor: color }]} /><Text style={styles.mapaLeyendaTexto}>{label}</Text></View>
                         ))}
                       </View>
-
-                      <TouchableOpacity
-                        style={styles.mapaRefreshBoton}
-                        onPress={() => { setCorrelaciones([]); cargarCorrelaciones(posicionesAgrupadas); }}>
+                      <TouchableOpacity style={styles.mapaRefreshBoton} onPress={() => { setCorrelaciones([]); cargarCorrelaciones(posicionesAgrupadas); }}>
                         <Text style={styles.mapaRefreshTexto}>↻ Recalcular</Text>
                       </TouchableOpacity>
                     </>
-                  ) : (
-                    <Text style={styles.mapaLoadingTexto}>No hay datos suficientes</Text>
-                  )}
+                  ) : <Text style={styles.mapaLoadingTexto}>No hay datos suficientes</Text>}
                 </View>
               )}
             </View>
@@ -686,53 +513,29 @@ export default function Cartera() {
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitulo}>Agregar posición</Text>
-                  <TouchableOpacity onPress={() => { setModalVisible(false); setSugerencias([]); }}>
-                    <Text style={styles.modalCerrar}>✕</Text>
-                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => { setModalVisible(false); setSugerencias([]); }}><Text style={styles.modalCerrar}>✕</Text></TouchableOpacity>
                 </View>
-                <TextInput style={styles.input} placeholder="Ticker (ej: GGAL, AAPL, GD30)"
-                  placeholderTextColor={theme.gray} value={ticker} onChangeText={onChangeTicker}
-                  autoCapitalize="characters" returnKeyType="next"
-                  onSubmitEditing={() => refNombre.current?.focus()} blurOnSubmit={false} />
+                <TextInput style={styles.input} placeholder="Ticker (ej: GGAL, AAPL, GD30)" placeholderTextColor={theme.gray} value={ticker} onChangeText={onChangeTicker} autoCapitalize="characters" returnKeyType="next" onSubmitEditing={() => refNombre.current?.focus()} blurOnSubmit={false} />
                 {sugerencias.length > 0 && (
                   <View style={styles.sugerenciasContainer}>
                     {sugerencias.map((s, i) => (
-                      <TouchableOpacity key={s.ticker}
-                        style={[styles.sugerenciaFila, i === sugerencias.length - 1 && { borderBottomWidth: 0 }]}
-                        onPress={() => seleccionarSugerencia(s)}>
-                        <View style={[styles.sugerenciaIcono, { backgroundColor: COLORES_CATEGORIA[s.categoria] + '22' }]}>
-                          <Text style={[styles.sugerenciaLetra, { color: COLORES_CATEGORIA[s.categoria] }]}>{s.ticker[0]}</Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.sugerenciaTicker}>{s.ticker}</Text>
-                          <Text style={styles.sugerenciaNombre}>{s.nombre}</Text>
-                        </View>
-                        <Text style={[styles.sugerenciaCategoria, { color: COLORES_CATEGORIA[s.categoria] }]}>
-                          {s.categoria.replace('_', ' ').toUpperCase()}
-                        </Text>
+                      <TouchableOpacity key={s.ticker} style={[styles.sugerenciaFila, i === sugerencias.length - 1 && { borderBottomWidth: 0 }]} onPress={() => seleccionarSugerencia(s)}>
+                        <View style={[styles.sugerenciaIcono, { backgroundColor: COLORES_CATEGORIA[s.categoria] + '22' }]}><Text style={[styles.sugerenciaLetra, { color: COLORES_CATEGORIA[s.categoria] }]}>{s.ticker[0]}</Text></View>
+                        <View style={{ flex: 1 }}><Text style={styles.sugerenciaTicker}>{s.ticker}</Text><Text style={styles.sugerenciaNombre}>{s.nombre}</Text></View>
+                        <Text style={[styles.sugerenciaCategoria, { color: COLORES_CATEGORIA[s.categoria] }]}>{s.categoria.replace('_', ' ').toUpperCase()}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
                 )}
-                <TextInput style={styles.input} placeholder="Nombre (opcional)" placeholderTextColor={theme.gray}
-                  value={nombre} onChangeText={setNombre} ref={refNombre} returnKeyType="next"
-                  onSubmitEditing={() => refCantidad.current?.focus()} blurOnSubmit={false} />
-                <TextInput style={styles.input} placeholder="Cantidad / VN" placeholderTextColor={theme.gray}
-                  value={cantidad} onChangeText={setCantidad} keyboardType="numeric" ref={refCantidad}
-                  returnKeyType="next" onSubmitEditing={() => refPrecio.current?.focus()} blurOnSubmit={false} />
-                <TextInput style={styles.input} placeholder="Precio de compra" placeholderTextColor={theme.gray}
-                  value={precioCompra} onChangeText={setPrecioCompra} keyboardType="numeric" ref={refPrecio}
-                  returnKeyType="next" onSubmitEditing={() => refFechaCompra.current?.focus()} blurOnSubmit={false} />
+                <TextInput style={styles.input} placeholder="Nombre (opcional)" placeholderTextColor={theme.gray} value={nombre} onChangeText={setNombre} ref={refNombre} returnKeyType="next" onSubmitEditing={() => refCantidad.current?.focus()} blurOnSubmit={false} />
+                <TextInput style={styles.input} placeholder="Cantidad / VN" placeholderTextColor={theme.gray} value={cantidad} onChangeText={setCantidad} keyboardType="numeric" ref={refCantidad} returnKeyType="next" onSubmitEditing={() => refPrecio.current?.focus()} blurOnSubmit={false} />
+                <TextInput style={styles.input} placeholder="Precio de compra" placeholderTextColor={theme.gray} value={precioCompra} onChangeText={setPrecioCompra} keyboardType="numeric" ref={refPrecio} returnKeyType="next" onSubmitEditing={() => refFechaCompra.current?.focus()} blurOnSubmit={false} />
                 <Text style={styles.inputLabel}>Fecha de adquisición</Text>
-                <TextInput style={styles.input} placeholder="DD/MM/AAAA" placeholderTextColor={theme.gray}
-                  value={fechaCompra} onChangeText={t => setFechaCompra(formatearFechaInput(t))} keyboardType="numeric"
-                  ref={refFechaCompra} returnKeyType="done" onSubmitEditing={() => Keyboard.dismiss()} />
+                <TextInput style={styles.input} placeholder="DD/MM/AAAA" placeholderTextColor={theme.gray} value={fechaCompra} onChangeText={t => setFechaCompra(formatearFechaInput(t))} keyboardType="numeric" ref={refFechaCompra} returnKeyType="done" onSubmitEditing={() => Keyboard.dismiss()} />
                 <Text style={styles.inputLabel}>Categoría</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
                   {CATEGORIAS.map(cat => (
-                    <TouchableOpacity key={cat.id}
-                      style={[styles.catBoton, categoriaSeleccionada === cat.id && { backgroundColor: cat.color, borderColor: cat.color }]}
-                      onPress={() => setCategoriaSeleccionada(cat.id)}>
+                    <TouchableOpacity key={cat.id} style={[styles.catBoton, categoriaSeleccionada === cat.id && { backgroundColor: cat.color, borderColor: cat.color }]} onPress={() => setCategoriaSeleccionada(cat.id)}>
                       <Text style={[styles.catTexto, categoriaSeleccionada === cat.id && { color: '#000' }]}>{cat.label}</Text>
                     </TouchableOpacity>
                   ))}
@@ -740,9 +543,7 @@ export default function Cartera() {
                 <Text style={styles.inputLabel}>Moneda</Text>
                 <View style={styles.monedaRow}>
                   {['ARS', 'USD'].map(m => (
-                    <TouchableOpacity key={m}
-                      style={[styles.monedaBoton, moneda === m && { backgroundColor: theme.green, borderColor: theme.green }]}
-                      onPress={() => setMoneda(m)}>
+                    <TouchableOpacity key={m} style={[styles.monedaBoton, moneda === m && { backgroundColor: theme.green, borderColor: theme.green }]} onPress={() => setMoneda(m)}>
                       <Text style={[styles.monedaTexto, moneda === m && { color: '#000' }]}>{m}</Text>
                     </TouchableOpacity>
                   ))}
@@ -764,30 +565,16 @@ export default function Cartera() {
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitulo}>Modificar {posEditando?.ticker}</Text>
-                  <TouchableOpacity onPress={() => setModalEditarVisible(false)}>
-                    <Text style={styles.modalCerrar}>✕</Text>
-                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setModalEditarVisible(false)}><Text style={styles.modalCerrar}>✕</Text></TouchableOpacity>
                 </View>
-                {posEditando?.fecha_compra && (
-                  <Text style={[styles.inputLabel, { marginBottom: 12, color: theme.gray }]}>
-                    📅 Compra del {fechaAInput(posEditando.fecha_compra)}
-                  </Text>
-                )}
-                <TextInput style={styles.input} placeholder="Nombre" placeholderTextColor={theme.gray}
-                  value={editNombre} onChangeText={setEditNombre} returnKeyType="next"
-                  onSubmitEditing={() => refEditCantidad.current?.focus()} blurOnSubmit={false} />
-                <TextInput style={styles.input} placeholder="Cantidad / VN" placeholderTextColor={theme.gray}
-                  value={editCantidad} onChangeText={setEditCantidad} keyboardType="numeric" ref={refEditCantidad}
-                  returnKeyType="next" onSubmitEditing={() => refEditPrecio.current?.focus()} blurOnSubmit={false} />
-                <TextInput style={styles.input} placeholder="Precio de compra" placeholderTextColor={theme.gray}
-                  value={editPrecioCompra} onChangeText={setEditPrecioCompra} keyboardType="numeric" ref={refEditPrecio}
-                  returnKeyType="done" onSubmitEditing={() => Keyboard.dismiss()} />
+                {posEditando?.fecha_compra && <Text style={[styles.inputLabel, { marginBottom: 12, color: theme.gray }]}>📅 Compra del {fechaAInput(posEditando.fecha_compra)}</Text>}
+                <TextInput style={styles.input} placeholder="Nombre" placeholderTextColor={theme.gray} value={editNombre} onChangeText={setEditNombre} returnKeyType="next" onSubmitEditing={() => refEditCantidad.current?.focus()} blurOnSubmit={false} />
+                <TextInput style={styles.input} placeholder="Cantidad / VN" placeholderTextColor={theme.gray} value={editCantidad} onChangeText={setEditCantidad} keyboardType="numeric" ref={refEditCantidad} returnKeyType="next" onSubmitEditing={() => refEditPrecio.current?.focus()} blurOnSubmit={false} />
+                <TextInput style={styles.input} placeholder="Precio de compra" placeholderTextColor={theme.gray} value={editPrecioCompra} onChangeText={setEditPrecioCompra} keyboardType="numeric" ref={refEditPrecio} returnKeyType="done" onSubmitEditing={() => Keyboard.dismiss()} />
                 <Text style={styles.inputLabel}>Categoría</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
                   {CATEGORIAS.map(cat => (
-                    <TouchableOpacity key={cat.id}
-                      style={[styles.catBoton, editCategoria === cat.id && { backgroundColor: cat.color, borderColor: cat.color }]}
-                      onPress={() => setEditCategoria(cat.id)}>
+                    <TouchableOpacity key={cat.id} style={[styles.catBoton, editCategoria === cat.id && { backgroundColor: cat.color, borderColor: cat.color }]} onPress={() => setEditCategoria(cat.id)}>
                       <Text style={[styles.catTexto, editCategoria === cat.id && { color: '#000' }]}>{cat.label}</Text>
                     </TouchableOpacity>
                   ))}
@@ -795,9 +582,7 @@ export default function Cartera() {
                 <Text style={styles.inputLabel}>Moneda</Text>
                 <View style={styles.monedaRow}>
                   {['ARS', 'USD'].map(m => (
-                    <TouchableOpacity key={m}
-                      style={[styles.monedaBoton, editMoneda === m && { backgroundColor: theme.green, borderColor: theme.green }]}
-                      onPress={() => setEditMoneda(m)}>
+                    <TouchableOpacity key={m} style={[styles.monedaBoton, editMoneda === m && { backgroundColor: theme.green, borderColor: theme.green }]} onPress={() => setEditMoneda(m)}>
                       <Text style={[styles.monedaTexto, editMoneda === m && { color: '#000' }]}>{m}</Text>
                     </TouchableOpacity>
                   ))}
@@ -817,76 +602,38 @@ export default function Cartera() {
           <View style={styles.menuContainer}>
             <Text style={styles.menuTicker}>{menuPos?.ticker}</Text>
             <Text style={styles.menuNombre}>{menuPos?.nombre}</Text>
-
-            {/* Si tiene múltiples compras, mostrar sub-posiciones para editar/eliminar */}
             {menuPos && menuPos.subPosiciones.length > 1 && (
-              <TouchableOpacity
-                style={[styles.menuOpcion, { marginBottom: 4 }]}
-                onPress={() => setMenuSubPosVisible(!menuSubPosVisible)}>
+              <TouchableOpacity style={[styles.menuOpcion, { marginBottom: 4 }]} onPress={() => setMenuSubPosVisible(!menuSubPosVisible)}>
                 <Text style={styles.menuOpcionIcono}>📋</Text>
-                <Text style={styles.menuOpcionTexto}>
-                  {menuSubPosVisible ? 'Ocultar compras' : `Ver ${menuPos.subPosiciones.length} compras`}
-                </Text>
+                <Text style={styles.menuOpcionTexto}>{menuSubPosVisible ? 'Ocultar compras' : `Ver ${menuPos.subPosiciones.length} compras`}</Text>
                 <Text style={styles.menuOpcionFlecha}>{menuSubPosVisible ? '▲' : '▼'}</Text>
               </TouchableOpacity>
             )}
-
-            {/* Sub-posiciones expandidas */}
-            {menuSubPosVisible && menuPos && menuPos.subPosiciones.map((sub, idx) => (
+            {menuSubPosVisible && menuPos && menuPos.subPosiciones.map((sub) => (
               <View key={sub.id} style={styles.subPosContainer}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.subPosTexto}>
-                    {sub.cantidad} u. · ${sub.precio_compra.toLocaleString('es-AR')}
-                  </Text>
-                  <Text style={styles.subPosFecha}>{fechaAInput(sub.fecha_compra)}</Text>
-                </View>
-                <TouchableOpacity onPress={() => abrirEditar(sub)} style={styles.subPosBoton}>
-                  <Text style={{ color: theme.blue, fontSize: 12, fontWeight: '600' }}>Editar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => eliminarPosicion(sub)} style={styles.subPosBoton}>
-                  <Text style={{ color: theme.red, fontSize: 12, fontWeight: '600' }}>Eliminar</Text>
-                </TouchableOpacity>
+                <View style={{ flex: 1 }}><Text style={styles.subPosTexto}>{sub.cantidad} u. · ${sub.precio_compra.toLocaleString('es-AR')}</Text><Text style={styles.subPosFecha}>{fechaAInput(sub.fecha_compra)}</Text></View>
+                <TouchableOpacity onPress={() => abrirEditar(sub)} style={styles.subPosBoton}><Text style={{ color: theme.blue, fontSize: 12, fontWeight: '600' }}>Editar</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => eliminarPosicion(sub)} style={styles.subPosBoton}><Text style={{ color: theme.red, fontSize: 12, fontWeight: '600' }}>Eliminar</Text></TouchableOpacity>
               </View>
             ))}
-
-            {/* Para posición única: opciones normales */}
             {menuPos && menuPos.subPosiciones.length === 1 && (
               <TouchableOpacity style={styles.menuOpcion} onPress={() => abrirEditar(menuPos.subPosiciones[0])}>
-                <Text style={styles.menuOpcionIcono}>✏️</Text>
-                <Text style={styles.menuOpcionTexto}>Modificar datos</Text>
-                <Text style={styles.menuOpcionFlecha}>›</Text>
+                <Text style={styles.menuOpcionIcono}>✏️</Text><Text style={styles.menuOpcionTexto}>Modificar datos</Text><Text style={styles.menuOpcionFlecha}>›</Text>
               </TouchableOpacity>
             )}
-
             <TouchableOpacity style={styles.menuOpcion} onPress={() => {
               const precioActual = getPrecioActual(menuPos!.ticker, menuPos!.categoria, menuPos!.ppc);
               const gpPct = menuPos!.ppc > 0 ? ((precioActual - menuPos!.ppc) / menuPos!.ppc) * 100 : 0;
-              setMenuPos(null);
-              setMenuSubPosVisible(false);
-              router.push({
-                pathname: '/detalle',
-                params: {
-                  ticker: menuPos!.ticker, nombre: menuPos!.nombre,
-                  precioActual: precioActual.toString(), gpPct: gpPct.toString(),
-                  categoria: menuPos!.categoria, cantidad: menuPos!.cantidadTotal.toString(),
-                  precioCompra: menuPos!.ppc.toString(),
-                }
-              });
+              setMenuPos(null); setMenuSubPosVisible(false);
+              router.push({ pathname: '/detalle', params: { ticker: menuPos!.ticker, nombre: menuPos!.nombre, precioActual: precioActual.toString(), gpPct: gpPct.toString(), categoria: menuPos!.categoria, cantidad: menuPos!.cantidadTotal.toString(), precioCompra: menuPos!.ppc.toString() }});
             }}>
-              <Text style={styles.menuOpcionIcono}>📈</Text>
-              <Text style={styles.menuOpcionTexto}>Ver rendimiento</Text>
-              <Text style={styles.menuOpcionFlecha}>›</Text>
+              <Text style={styles.menuOpcionIcono}>📈</Text><Text style={styles.menuOpcionTexto}>Ver rendimiento</Text><Text style={styles.menuOpcionFlecha}>›</Text>
             </TouchableOpacity>
-
             {menuPos && menuPos.subPosiciones.length === 1 && (
-              <>
-                <View style={styles.menuDivider} />
-                <TouchableOpacity style={styles.menuOpcion} onPress={() => eliminarPosicion(menuPos.subPosiciones[0])}>
-                  <Text style={styles.menuOpcionIcono}>🗑️</Text>
-                  <Text style={[styles.menuOpcionTexto, { color: theme.red }]}>Eliminar posición</Text>
-                  <Text style={styles.menuOpcionFlecha}>›</Text>
-                </TouchableOpacity>
-              </>
+              <><View style={styles.menuDivider} />
+              <TouchableOpacity style={styles.menuOpcion} onPress={() => eliminarPosicion(menuPos.subPosiciones[0])}>
+                <Text style={styles.menuOpcionIcono}>🗑️</Text><Text style={[styles.menuOpcionTexto, { color: theme.red }]}>Eliminar posición</Text><Text style={styles.menuOpcionFlecha}>›</Text>
+              </TouchableOpacity></>
             )}
           </View>
         </TouchableOpacity>
@@ -898,9 +645,9 @@ export default function Cartera() {
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.bg },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 60 },
-  saludo: { color: theme.gray, fontSize: 12 },
-  appNombre: { color: theme.white, fontSize: 18, fontWeight: 'bold', marginTop: 2 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 12 },
+  appNombre: { color: theme.white, fontSize: 20, fontWeight: '800' },
+  perfilBoton: { width: 34, height: 34, borderRadius: 17, backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, alignItems: 'center', justifyContent: 'center' },
   botonAgregar: { backgroundColor: theme.green, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
   botonAgregarTexto: { color: '#000', fontWeight: '700', fontSize: 13 },
   toggleMoneda: { flexDirection: 'row', backgroundColor: theme.card, borderRadius: 20, borderWidth: 1, borderColor: theme.border, overflow: 'hidden' },
@@ -919,7 +666,11 @@ const getStyles = (theme: any) => StyleSheet.create({
   tarjeta: { flex: 1, backgroundColor: theme.card, borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: theme.border },
   tarjetaLabel: { color: theme.gray, fontSize: 10 },
   tarjetaValor: { color: theme.white, fontSize: 13, fontWeight: '700', marginTop: 4 },
+  seccionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 12 },
+  seccionTituloInline: { color: theme.white, fontSize: 16, fontWeight: '700' },
   seccionTitulo: { color: theme.white, fontSize: 16, fontWeight: '700', paddingHorizontal: 20, marginBottom: 12 },
+  seccionBotonPlus: { width: 28, height: 28, borderRadius: 14, backgroundColor: theme.green, alignItems: 'center', justifyContent: 'center' },
+  seccionBotonPlusTexto: { color: '#000', fontSize: 18, fontWeight: '700', lineHeight: 22 },
   emptyContainer: { alignItems: 'center', marginTop: 40, gap: 16 },
   emptyTexto: { color: theme.gray, fontSize: 14 },
   botonAgregarEmpty: { backgroundColor: theme.green, borderRadius: 20, paddingHorizontal: 20, paddingVertical: 10 },
@@ -935,14 +686,10 @@ const getStyles = (theme: any) => StyleSheet.create({
   etiqOriginal: { color: theme.gray, fontSize: 9, marginTop: 1 },
   menuBoton: { padding: 8 },
   menuPuntos: { color: theme.gray, fontSize: 20, fontWeight: '700' },
-  badgeMultiple: { backgroundColor: theme.card2, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: theme.border },
-  badgeMultipleTexto: { color: theme.gray, fontSize: 9, fontWeight: '600' },
-  // Sub-posiciones en menú
   subPosContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.card2, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 4 },
   subPosTexto: { color: theme.white, fontSize: 12, fontWeight: '600' },
   subPosFecha: { color: theme.gray, fontSize: 10, marginTop: 2 },
   subPosBoton: { paddingHorizontal: 8, paddingVertical: 4 },
-  // ── Mapa de calor ──
   mapaHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingRight: 20 },
   mapaToggle: { color: theme.gray, fontSize: 14, paddingBottom: 12 },
   mapaContainer: { backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 20, padding: 16, borderWidth: 1, borderColor: theme.border },
@@ -965,7 +712,6 @@ const getStyles = (theme: any) => StyleSheet.create({
   mapaLeyendaTexto: { color: theme.gray, fontSize: 9 },
   mapaRefreshBoton: { alignSelf: 'center', marginTop: 14, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: theme.green + '55' },
   mapaRefreshTexto: { color: theme.green, fontSize: 12, fontWeight: '600' },
-  // ── Modales ──
   modalOverlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end' },
   modalContainer: { backgroundColor: theme.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: theme.border, maxHeight: '90%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
