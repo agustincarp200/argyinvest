@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, LayoutAnimation, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
 type Posicion = {
   id: string;
@@ -42,17 +43,57 @@ const CATEGORIAS = [
 const CATS_USD = ['nasdaq', 'crypto', 'bono_usd'];
 const CATS_ARS = ['byma', 'bono_ars', 'letra', 'fci', 'on'];
 
-const CORREL_CATEGORIAS: Record<string, Record<string, number>> = {
-  cedear:   { cedear: 1.00, nasdaq: 0.85, byma: 0.55, crypto: 0.25, bono_ars: -0.10, bono_usd: 0.20, letra: -0.05, on: 0.10, fci: 0.05 },
-  nasdaq:   { cedear: 0.85, nasdaq: 1.00, byma: 0.50, crypto: 0.30, bono_ars: -0.15, bono_usd: 0.25, letra: -0.05, on: 0.15, fci: 0.05 },
-  byma:     { cedear: 0.55, nasdaq: 0.50, byma: 1.00, crypto: 0.20, bono_ars: 0.10,  bono_usd: 0.15, letra: 0.05,  on: 0.20, fci: 0.10 },
-  crypto:   { cedear: 0.25, nasdaq: 0.30, byma: 0.20, crypto: 1.00, bono_ars: -0.05, bono_usd: 0.10, letra: -0.05, on: 0.05, fci: 0.00 },
-  bono_ars: { cedear: -0.10, nasdaq: -0.15, byma: 0.10, crypto: -0.05, bono_ars: 1.00, bono_usd: 0.30, letra: 0.80, on: 0.40, fci: 0.60 },
-  bono_usd: { cedear: 0.20, nasdaq: 0.25, byma: 0.15, crypto: 0.10, bono_ars: 0.30, bono_usd: 1.00, letra: 0.20, on: 0.50, fci: 0.20 },
-  letra:    { cedear: -0.05, nasdaq: -0.05, byma: 0.05, crypto: -0.05, bono_ars: 0.80, bono_usd: 0.20, letra: 1.00, on: 0.35, fci: 0.70 },
-  on:       { cedear: 0.10, nasdaq: 0.15, byma: 0.20, crypto: 0.05, bono_ars: 0.40, bono_usd: 0.50, letra: 0.35, on: 1.00, fci: 0.30 },
-  fci:      { cedear: 0.05, nasdaq: 0.05, byma: 0.10, crypto: 0.00, bono_ars: 0.60, bono_usd: 0.20, letra: 0.70, on: 0.30, fci: 1.00 },
-};
+const PERIODOS = ['1D', '7D', '1M', '3M', '1A', 'Máx'];
+
+// ── Sparkline SVG ──────────────────────────────────────
+function Sparkline({ data, color, width = 60, height = 28 }: { data: number[]; color: string; width?: number; height?: number }) {
+  if (!data || data.length < 2) return <View style={{ width, height }} />;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * width;
+    const y = height - ((v - min) / range) * height * 0.85 - height * 0.075;
+    return `${x},${y}`;
+  });
+  const d = `M ${pts.join(' L ')}`;
+  return (
+    <Svg width={width} height={height}>
+      <Path d={d} stroke={color} strokeWidth={1.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+// ── Gráfico evolución cartera ──────────────────────────
+function GraficoCartera({ datos, positivo, theme }: { datos: number[]; positivo: boolean; theme: any }) {
+  if (!datos || datos.length < 2) return null;
+  const W = 340; const H = 120;
+  const min = Math.min(...datos);
+  const max = Math.max(...datos);
+  const range = max - min || 1;
+  const pts = datos.map((v, i) => {
+    const x = (i / (datos.length - 1)) * W;
+    const y = H - ((v - min) / range) * H * 0.8 - H * 0.1;
+    return { x, y };
+  });
+  const linePath = `M ${pts.map(p => `${p.x},${p.y}`).join(' L ')}`;
+  const areaPath = `M ${pts[0].x},${H} ${pts.map(p => `L ${p.x},${p.y}`).join(' ')} L ${pts[pts.length-1].x},${H} Z`;
+  const esPositivoPeriodo = datos[datos.length - 1] >= datos[0];
+  const color = esPositivoPeriodo ? '#00D26A' : '#FF4D4D';
+
+  return (
+    <Svg width={W} height={H} style={{ marginTop: 8 }}>
+      <Defs>
+        <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={color} stopOpacity="0.3" />
+          <Stop offset="1" stopColor={color} stopOpacity="0" />
+        </LinearGradient>
+      </Defs>
+      <Path d={areaPath} fill="url(#grad)" />
+      <Path d={linePath} stroke={color} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
 
 function agruparPosiciones(posiciones: Posicion[]): PosicionAgrupada[] {
   const mapa: Record<string, PosicionAgrupada> = {};
@@ -67,54 +108,6 @@ function agruparPosiciones(posiciones: Posicion[]): PosicionAgrupada[] {
     g.subPosiciones.push(pos);
   }
   return Object.values(mapa);
-}
-
-function pearsonCorrelation(x: number[], y: number[]): number {
-  const n = Math.min(x.length, y.length);
-  if (n < 5) return NaN;
-  const xs = x.slice(0, n); const ys = y.slice(0, n);
-  const meanX = xs.reduce((a, b) => a + b, 0) / n;
-  const meanY = ys.reduce((a, b) => a + b, 0) / n;
-  let num = 0, denX = 0, denY = 0;
-  for (let i = 0; i < n; i++) {
-    const dx = xs[i] - meanX; const dy = ys[i] - meanY;
-    num += dx * dy; denX += dx * dx; denY += dy * dy;
-  }
-  const den = Math.sqrt(denX * denY);
-  return den === 0 ? 0 : Math.max(-1, Math.min(1, num / den));
-}
-
-function calcularRetornos(closes: number[]): number[] {
-  const retornos: number[] = [];
-  for (let i = 1; i < closes.length; i++) {
-    if (closes[i - 1] > 0) retornos.push((closes[i] - closes[i - 1]) / closes[i - 1]);
-  }
-  return retornos;
-}
-
-function getYFTickerFromAgrupada(pos: PosicionAgrupada): string {
-  if (pos.categoria === 'crypto') {
-    const mapa: Record<string, string> = { BTC: 'BTC-USD', ETH: 'ETH-USD', SOL: 'SOL-USD', ADA: 'ADA-USD', USDT: 'USDT-USD' };
-    return mapa[pos.ticker] ?? `${pos.ticker}-USD`;
-  }
-  if (['byma', 'bono_ars', 'letra', 'on'].includes(pos.categoria)) return `${pos.ticker}.BA`;
-  return pos.ticker;
-}
-
-function getCorrelColor(val: number): string {
-  if (isNaN(val)) return '#333333';
-  if (val >= 0.7) return '#006633'; if (val >= 0.4) return '#00A64F';
-  if (val >= 0.1) return '#4DC98A'; if (val >= -0.1) return '#444444';
-  if (val >= -0.4) return '#C97A4D'; if (val >= -0.7) return '#D94F4F';
-  return '#AA0000';
-}
-
-function getCorrelLabel(val: number): string {
-  if (isNaN(val)) return '—';
-  if (val >= 0.7) return 'Alta ↑'; if (val >= 0.4) return 'Mod ↑';
-  if (val >= 0.1) return 'Baja ↑'; if (val >= -0.1) return 'Neutra';
-  if (val >= -0.4) return 'Baja ↓'; if (val >= -0.7) return 'Mod ↓';
-  return 'Alta ↓';
 }
 
 function fechaAInput(iso: string) {
@@ -135,6 +128,15 @@ function formatearFechaInput(texto: string) {
   return r;
 }
 
+function getYFTicker(ticker: string, categoria: string): string {
+  if (categoria === 'crypto') {
+    const mapa: Record<string, string> = { BTC: 'BTC-USD', ETH: 'ETH-USD', SOL: 'SOL-USD', ADA: 'ADA-USD', USDT: 'USDT-USD' };
+    return mapa[ticker] ?? `${ticker}-USD`;
+  }
+  if (['byma', 'bono_ars', 'letra', 'on'].includes(categoria)) return `${ticker}.BA`;
+  return ticker;
+}
+
 export default function Inicio() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -143,18 +145,23 @@ export default function Inicio() {
   const [posiciones, setPosiciones] = useState<Posicion[]>([]);
   const [precios, setPrecios] = useState<Record<string, number>>({});
   const [cargando, setCargando] = useState(true);
+  const [nombreUsuario, setNombreUsuario] = useState('');
+  const [modoMoneda, setModoMoneda] = useState<'ARS' | 'USD'>('ARS');
+
+  // Gráfico evolución
+  const [periodoActivo, setPeriodoActivo] = useState('1M');
+  const [datosGrafico, setDatosGrafico] = useState<number[]>([]);
+  const [cargandoGrafico, setCargandoGrafico] = useState(false);
+
+  // Sparklines por ticker
+  const [sparklines, setSparklines] = useState<Record<string, number[]>>({});
+
+  // Modal agregar
   const [modalVisible, setModalVisible] = useState(false);
   const [modalEditarVisible, setModalEditarVisible] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [menuPos, setMenuPos] = useState<PosicionAgrupada | null>(null);
   const [menuSubPosVisible, setMenuSubPosVisible] = useState(false);
-  const [modoMoneda, setModoMoneda] = useState<'ARS' | 'USD'>('ARS');
-
-  const [correlaciones, setCorrelaciones] = useState<number[][]>([]);
-  const [tickersCorrel, setTickersCorrel] = useState<string[]>([]);
-  const [cargandoCorrel, setCargandoCorrel] = useState(false);
-  const [mostrarMapa, setMostrarMapa] = useState(false);
-  const [fuentesCorrel, setFuentesCorrel] = useState<Record<string, 'yahoo' | 'categoria'>>({});
 
   const [ticker, setTicker] = useState('');
   const [nombre, setNombre] = useState('');
@@ -192,16 +199,22 @@ export default function Inicio() {
     setCargando(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const [{ data: pos }, { data: prec }] = await Promise.all([
+
+    const [{ data: pos }, { data: prec }, { data: userData }] = await Promise.all([
       supabase.from('posiciones').select('*').eq('usuario_id', user.id),
       supabase.from('precios_cache').select('ticker, precio'),
+      supabase.from('usuarios').select('nombre').eq('id', user.id).single(),
     ]);
+
     if (pos) setPosiciones(pos);
     if (prec) {
       const mapa: Record<string, number> = {};
       prec.forEach(p => { mapa[p.ticker] = p.precio; });
       setPrecios(mapa);
     }
+    if (userData?.nombre) setNombreUsuario(userData.nombre);
+    else if (user.email) setNombreUsuario(user.email.split('@')[0]);
+
     setCargando(false);
   }
 
@@ -209,34 +222,101 @@ export default function Inicio() {
 
   const posicionesAgrupadas = agruparPosiciones(posiciones);
 
-  async function cargarCorrelaciones(agrupadas: PosicionAgrupada[]) {
-    if (agrupadas.length < 2) return;
-    setCargandoCorrel(true);
-    const activos = [...agrupadas].sort((a, b) => (b.cantidadTotal * b.ppc) - (a.cantidadTotal * a.ppc)).slice(0, 8);
-    const retornosMap: Record<string, number[]> = {};
-    const fuentes: Record<string, 'yahoo' | 'categoria'> = {};
-    await Promise.all(activos.map(async (p) => {
+  // Cargar sparklines para cada activo
+  useEffect(() => {
+    if (posicionesAgrupadas.length === 0) return;
+    posicionesAgrupadas.forEach(async (pos) => {
       try {
-        const yfTicker = getYFTickerFromAgrupada(p);
-        const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${yfTicker}?interval=1d&range=3mo`);
+        const yfTicker = getYFTicker(pos.ticker, pos.categoria);
+        const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${yfTicker}?interval=1d&range=1mo`);
         const json = await res.json();
-        const closes: number[] = (json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter((v: any) => v !== null && !isNaN(v));
-        if (closes.length >= 10) { retornosMap[p.ticker] = calcularRetornos(closes); fuentes[p.ticker] = 'yahoo'; }
-        else fuentes[p.ticker] = 'categoria';
-      } catch { fuentes[p.ticker] = 'categoria'; }
-    }));
-    const tickers = activos.map(p => p.ticker);
-    const n = tickers.length;
-    const matriz: number[][] = Array.from({ length: n }, () => Array(n).fill(0));
-    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
-      if (i === j) { matriz[i][j] = 1.0; continue; }
-      const retI = retornosMap[tickers[i]]; const retJ = retornosMap[tickers[j]];
-      if (retI && retJ && retI.length >= 10 && retJ.length >= 10) matriz[i][j] = pearsonCorrelation(retI, retJ);
-      else matriz[i][j] = CORREL_CATEGORIAS[activos[i].categoria]?.[activos[j].categoria] ?? 0;
-    }
-    setTickersCorrel(tickers); setCorrelaciones(matriz); setFuentesCorrel(fuentes);
-    setCargandoCorrel(false);
+        const closes: number[] = (json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [])
+          .filter((v: any) => v !== null && !isNaN(v));
+        if (closes.length >= 5) {
+          setSparklines(prev => ({ ...prev, [pos.ticker]: closes }));
+        }
+      } catch {}
+    });
+  }, [posiciones]);
+
+  // Cargar gráfico de evolución de cartera
+  async function cargarGraficoCartera(periodo: string) {
+    if (posicionesAgrupadas.length === 0) return;
+    setCargandoGrafico(true);
+    try {
+      const rangeMap: Record<string, string> = { '1D': '1d', '7D': '5d', '1M': '1mo', '3M': '3mo', '1A': '1y', 'Máx': '5y' };
+      const intervalMap: Record<string, string> = { '1D': '5m', '7D': '1h', '1M': '1d', '3M': '1d', '1A': '1wk', 'Máx': '1mo' };
+      const range = rangeMap[periodo] ?? '1mo';
+      const interval = intervalMap[periodo] ?? '1d';
+
+      // Usar SPY como proxy del portfolio para el gráfico de forma (escala real después)
+      // En realidad calculamos valor total diario sumando posiciones × precio histórico
+      // Por simplicidad y velocidad, usamos el primer activo más pesado como proxy de forma
+      const principal = posicionesAgrupadas.sort((a, b) => b.cantidadTotal * b.ppc - a.cantidadTotal * a.ppc)[0];
+      const yfTicker = getYFTicker(principal.ticker, principal.categoria);
+      const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${yfTicker}?interval=${interval}&range=${range}`);
+      const json = await res.json();
+      const closes: number[] = (json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [])
+        .filter((v: any) => v !== null && !isNaN(v));
+
+      if (closes.length >= 2) {
+        // Normalizar: escalar los cierres para que reflejen el valor del portfolio
+        const precioActualActivo = closes[closes.length - 1];
+        const valorActualPortfolio = totalActual;
+        const factor = valorActualPortfolio / precioActualActivo;
+        setDatosGrafico(closes.map(c => c * factor));
+      }
+    } catch {}
+    setCargandoGrafico(false);
   }
+
+  useEffect(() => {
+    if (!cargando && posicionesAgrupadas.length > 0) cargarGraficoCartera(periodoActivo);
+  }, [cargando, periodoActivo]);
+
+  const ccl = precios['CCL'] ?? 1285;
+
+  const getPrecioActual = (ticker: string, categoria: string, precio_compra: number): number => {
+    if (categoria === 'cedear') {
+      const precioARS = precios[`${ticker}.BA`];
+      if (precioARS && precioARS > 0) return precioARS;
+      const precioUSD = precios[ticker];
+      if (precioUSD && precioUSD > 0) return precioUSD * ccl;
+      return precio_compra;
+    }
+    if (categoria === 'byma') {
+      const precioARS = precios[`${ticker}.BA`] ?? precios[ticker];
+      return precioARS && precioARS > 0 ? precioARS : precio_compra;
+    }
+    return precios[ticker] ?? precio_compra;
+  };
+
+  const convertir = (valor: number, categoria: string): number => {
+    if (modoMoneda === 'USD') {
+      if (CATS_ARS.includes(categoria) || categoria === 'cedear') return valor / ccl;
+      return valor;
+    } else {
+      if (CATS_USD.includes(categoria)) return valor * ccl;
+      return valor;
+    }
+  };
+
+  const formatVal = (valor: number): string =>
+    modoMoneda === 'ARS'
+      ? `$ ${valor.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`
+      : `u$s ${valor.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const etiquetaOriginal = (categoria: string): string | null => {
+    if (modoMoneda === 'USD' && [...CATS_ARS, 'cedear'].includes(categoria)) return 'ARS';
+    if (modoMoneda === 'ARS' && CATS_USD.includes(categoria)) return 'USD';
+    return null;
+  };
+
+  const totalInvertido = posicionesAgrupadas.reduce((s, p) => s + p.cantidadTotal * convertir(p.ppc, p.categoria), 0);
+  const totalActual = posicionesAgrupadas.reduce((s, p) => s + p.cantidadTotal * convertir(getPrecioActual(p.ticker, p.categoria, p.ppc), p.categoria), 0);
+  const ganancia = totalActual - totalInvertido;
+  const gananciaPct = totalInvertido > 0 ? (ganancia / totalInvertido) * 100 : 0;
+  const positivo = ganancia >= 0;
 
   function onChangeTicker(t: string) { const val = t.toUpperCase(); setTicker(val); setSugerencias(buscarTickers(val)); }
   function seleccionarSugerencia(s: TickerSugerido) {
@@ -284,7 +364,7 @@ export default function Inicio() {
       setModalVisible(false);
       setTicker(''); setNombre(''); setCantidad(''); setPrecioCompra('');
       setFechaCompra(fechaAInput(new Date().toISOString().split('T')[0]));
-      setSugerencias([]); setCorrelaciones([]); cargarDatos();
+      setSugerencias([]); cargarDatos();
     } else Alert.alert('Error', error.message);
     setGuardando(false);
   }
@@ -296,62 +376,27 @@ export default function Inicio() {
       { text: 'Eliminar', style: 'destructive', onPress: async () => {
         const { error } = await supabase.from('posiciones').delete().eq('id', pos.id);
         if (error) Alert.alert('Error', error.message);
-        else { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setCorrelaciones([]); cargarDatos(); }
+        else { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); cargarDatos(); }
       }}
     ]);
   }
 
-  const ccl = precios['CCL'] ?? 1285;
-
-  const getPrecioActual = (ticker: string, categoria: string, precio_compra: number): number => {
-    if (categoria === 'cedear') {
-      const precioARS = precios[`${ticker}.BA`];
-      if (precioARS && precioARS > 0) return precioARS;
-      const precioUSD = precios[ticker];
-      if (precioUSD && precioUSD > 0) return precioUSD * ccl;
-      return precio_compra;
-    }
-    if (categoria === 'byma') {
-      const precioARS = precios[`${ticker}.BA`] ?? precios[ticker];
-      return precioARS && precioARS > 0 ? precioARS : precio_compra;
-    }
-    return precios[ticker] ?? precio_compra;
+  const saludoHora = () => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Buenos días';
+    if (h < 19) return 'Buenas tardes';
+    return 'Buenas noches';
   };
-
-  const convertir = (valor: number, categoria: string): number => {
-    if (modoMoneda === 'USD') {
-      if (CATS_ARS.includes(categoria) || categoria === 'cedear') return valor / ccl;
-      return valor;
-    } else {
-      if (CATS_USD.includes(categoria)) return valor * ccl;
-      return valor;
-    }
-  };
-
-  const formatVal = (valor: number): string =>
-    modoMoneda === 'ARS'
-      ? `$ ${valor.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`
-      : `u$s ${valor.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-  const etiquetaOriginal = (categoria: string): string | null => {
-    if (modoMoneda === 'USD' && [...CATS_ARS, 'cedear'].includes(categoria)) return 'ARS';
-    if (modoMoneda === 'ARS' && CATS_USD.includes(categoria)) return 'USD';
-    return null;
-  };
-
-  const totalInvertido = posicionesAgrupadas.reduce((s, p) => s + p.cantidadTotal * convertir(p.ppc, p.categoria), 0);
-  const totalActual = posicionesAgrupadas.reduce((s, p) => s + p.cantidadTotal * convertir(getPrecioActual(p.ticker, p.categoria, p.ppc), p.categoria), 0);
-  const ganancia = totalActual - totalInvertido;
-  const gananciaPct = totalInvertido > 0 ? (ganancia / totalInvertido) * 100 : 0;
-  const positivo = ganancia >= 0;
-  const CELL_SIZE = 52;
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
 
-      {/* ── HEADER con perfil integrado ── */}
+      {/* ── HEADER ── */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.appNombre}>Inicio 🏠</Text>
+        <View>
+          <Text style={styles.saludo}>{saludoHora()},</Text>
+          <Text style={styles.nombreUsuario}>{nombreUsuario || 'Inversor'} 👋</Text>
+        </View>
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <View style={styles.toggleMoneda}>
             <TouchableOpacity style={[styles.toggleBtn, modoMoneda === 'ARS' && { backgroundColor: theme.gold }]} onPress={() => setModoMoneda('ARS')}>
@@ -361,9 +406,6 @@ export default function Inicio() {
               <Text style={[styles.toggleBtnTexto, modoMoneda === 'USD' && { color: '#000' }]}>USD</Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.botonAgregar} onPress={() => setModalVisible(true)}>
-            <Text style={styles.botonAgregarTexto}>+ Agregar</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={styles.perfilBoton} onPress={() => router.push('/perfil')}>
             <Text style={{ fontSize: 16 }}>👤</Text>
           </TouchableOpacity>
@@ -374,27 +416,47 @@ export default function Inicio() {
         <View style={styles.loadingContainer}><ActivityIndicator size="large" color={theme.green} /></View>
       ) : (
         <>
-          <View style={styles.totalContainer}>
+          {/* ── RESUMEN TOTAL + GRÁFICO ── */}
+          <View style={styles.graficoCard}>
             <Text style={styles.totalLabel}>VALOR TOTAL · {modoMoneda}</Text>
             <Text style={styles.totalValor}>{formatVal(totalActual)}</Text>
-            <View style={[styles.variacionBadge, { backgroundColor: positivo ? theme.greenDim : theme.redDim }]}>
-              <Text style={[styles.variacionTexto, { color: positivo ? theme.green : theme.red }]}>
-                {positivo ? '+' : ''}{gananciaPct.toFixed(2)}%{'  '}({positivo ? '+' : ''}{formatVal(Math.abs(ganancia))})
-              </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+              <View style={[styles.variacionBadge, { backgroundColor: positivo ? theme.greenDim : theme.redDim }]}>
+                <Text style={[styles.variacionTexto, { color: positivo ? theme.green : theme.red }]}>
+                  {positivo ? '+' : ''}{gananciaPct.toFixed(2)}%{'  '}{positivo ? '+' : ''}{formatVal(Math.abs(ganancia))}
+                </Text>
+              </View>
+              {modoMoneda === 'USD' && <Text style={styles.cclTexto}>CCL ${ccl.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</Text>}
             </View>
-            {modoMoneda === 'USD' && <Text style={styles.cclTexto}>CCL: ${ccl.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</Text>}
-            <TouchableOpacity style={styles.verRendimientoBoton} onPress={() => router.push('/rendimiento')}>
-              <Text style={styles.verRendimientoTexto}>Ver rendimiento →</Text>
-            </TouchableOpacity>
+
+            {/* Gráfico */}
+            {cargandoGrafico ? (
+              <View style={{ height: 120, alignItems: 'center', justifyContent: 'center', marginTop: 8 }}>
+                <ActivityIndicator size="small" color={theme.green} />
+              </View>
+            ) : datosGrafico.length > 1 ? (
+              <GraficoCartera datos={datosGrafico} positivo={positivo} theme={theme} />
+            ) : null}
+
+            {/* Selector de período */}
+            <View style={styles.periodoRow}>
+              {PERIODOS.map(p => (
+                <TouchableOpacity key={p} style={[styles.periodoBtn, periodoActivo === p && { backgroundColor: theme.green }]}
+                  onPress={() => setPeriodoActivo(p)}>
+                  <Text style={[styles.periodoBtnTexto, periodoActivo === p && { color: '#000' }]}>{p}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
+          {/* ── TARJETAS ── */}
           <View style={styles.tarjetasRow}>
             <View style={styles.tarjeta}><Text style={styles.tarjetaLabel}>Invertido</Text><Text style={styles.tarjetaValor} numberOfLines={1}>{formatVal(totalInvertido)}</Text></View>
             <View style={styles.tarjeta}><Text style={styles.tarjetaLabel}>Activos</Text><Text style={[styles.tarjetaValor, { color: theme.blue }]}>{posicionesAgrupadas.length}</Text></View>
             <View style={styles.tarjeta}><Text style={styles.tarjetaLabel}>G/P</Text><Text style={[styles.tarjetaValor, { color: positivo ? theme.green : theme.red }]} numberOfLines={1}>{positivo ? '+' : ''}{formatVal(Math.abs(ganancia))}</Text></View>
           </View>
 
-          {/* ── Mis Activos ── */}
+          {/* ── MIS ACTIVOS ── */}
           <View style={styles.seccionHeaderRow}>
             <Text style={styles.seccionTituloInline}>Mis Activos</Text>
             <TouchableOpacity style={styles.seccionBotonPlus} onPress={() => setModalVisible(true)}>
@@ -421,6 +483,8 @@ export default function Inicio() {
                 const esPositivo = gp >= 0;
                 const cat = CATEGORIAS.find(c => c.id === pos.categoria);
                 const etiq = etiquetaOriginal(pos.categoria);
+                const spark = sparklines[pos.ticker];
+                const pct = totalActual > 0 ? (valorActual / totalActual) * 100 : 0;
                 return (
                   <View key={pos.ticker} style={[styles.fila, i === posicionesAgrupadas.length - 1 && { borderBottomWidth: 0 }]}>
                     <View style={[styles.filaIcono, { backgroundColor: (cat?.color ?? theme.green) + '22' }]}>
@@ -431,10 +495,14 @@ export default function Inicio() {
                       <Text style={styles.filaNombre}>{pos.nombre}</Text>
                       <Text style={styles.filaCantidad}>{pos.cantidadTotal} u. · PPC ${pos.ppc.toLocaleString('es-AR', { maximumFractionDigits: 2 })}</Text>
                     </View>
-                    <View style={{ alignItems: 'flex-end', marginRight: 8 }}>
+                    {/* Sparkline */}
+                    {spark && (
+                      <Sparkline data={spark} color={esPositivo ? '#00D26A' : '#FF4D4D'} width={52} height={28} />
+                    )}
+                    <View style={{ alignItems: 'flex-end', marginLeft: 8 }}>
                       <Text style={styles.filaValor}>{formatVal(valorActual)}</Text>
                       <Text style={[styles.filaGP, { color: esPositivo ? theme.green : theme.red }]}>{esPositivo ? '+' : ''}{gpPct.toFixed(2)}%</Text>
-                      {etiq && <Text style={styles.etiqOriginal}>orig. {etiq}</Text>}
+                      <Text style={styles.filaPct}>{pct.toFixed(1)}%</Text>
                     </View>
                     <TouchableOpacity onPress={() => { setMenuPos(pos); setMenuSubPosVisible(false); }} style={styles.menuBoton}>
                       <Text style={styles.menuPuntos}>⋯</Text>
@@ -445,63 +513,9 @@ export default function Inicio() {
             </View>
           )}
 
-          {/* ── Correlación ── */}
-          {posicionesAgrupadas.length >= 2 && (
-            <View style={{ marginBottom: 20 }}>
-              <TouchableOpacity style={styles.mapaHeaderRow} onPress={() => {
-                const nuevo = !mostrarMapa; setMostrarMapa(nuevo);
-                if (nuevo && correlaciones.length === 0) cargarCorrelaciones(posicionesAgrupadas);
-              }}>
-                <Text style={styles.seccionTitulo}>Correlación de activos 🔥</Text>
-                <Text style={styles.mapaToggle}>{mostrarMapa ? '▲' : '▼'}</Text>
-              </TouchableOpacity>
-              {mostrarMapa && (
-                <View style={styles.mapaContainer}>
-                  {cargandoCorrel ? (
-                    <View style={styles.mapaLoading}><ActivityIndicator size="small" color={theme.green} /><Text style={styles.mapaLoadingTexto}>Calculando correlaciones...</Text></View>
-                  ) : correlaciones.length > 0 ? (
-                    <>
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                        <View>
-                          <View style={{ flexDirection: 'row', marginLeft: CELL_SIZE }}>
-                            {tickersCorrel.map(t => (<View key={t} style={[styles.mapaHeaderCell, { width: CELL_SIZE }]}><Text style={styles.mapaHeaderTexto} numberOfLines={1}>{t}</Text></View>))}
-                          </View>
-                          {correlaciones.map((fila, i) => (
-                            <View key={tickersCorrel[i]} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <View style={[styles.mapaRowLabel, { width: CELL_SIZE }]}><Text style={styles.mapaHeaderTexto} numberOfLines={1}>{tickersCorrel[i]}</Text></View>
-                              {fila.map((val, j) => (
-                                <View key={`${tickersCorrel[i]}-${tickersCorrel[j]}`} style={[styles.mapaCell, { width: CELL_SIZE, height: CELL_SIZE, backgroundColor: getCorrelColor(val), borderColor: i === j ? '#FFFFFF44' : 'transparent', borderWidth: i === j ? 1 : 0 }]}>
-                                  <Text style={styles.mapaCellValor}>{isNaN(val) ? '—' : val.toFixed(2)}</Text>
-                                  {i !== j && <Text style={styles.mapaCellLabel}>{getCorrelLabel(val)}</Text>}
-                                </View>
-                              ))}
-                            </View>
-                          ))}
-                        </View>
-                      </ScrollView>
-                      <View style={styles.mapaFuentesRow}>
-                        {Object.entries(fuentesCorrel).map(([t, f]) => (
-                          <View key={t} style={styles.mapaFuenteItem}>
-                            <View style={[styles.mapaFuenteDot, { backgroundColor: f === 'yahoo' ? theme.green : theme.gold }]} />
-                            <Text style={styles.mapaFuenteTexto}>{t}</Text>
-                          </View>
-                        ))}
-                      </View>
-                      <Text style={styles.mapaFuenteNota}>🟢 Yahoo Finance (real) · 🟡 Estimado por categoría</Text>
-                      <View style={styles.mapaLeyendaRow}>
-                        {[{ color: '#006633', label: 'Alta +' }, { color: '#4DC98A', label: 'Baja +' }, { color: '#444444', label: 'Neutra' }, { color: '#C97A4D', label: 'Baja −' }, { color: '#AA0000', label: 'Alta −' }].map(({ color, label }) => (
-                          <View key={label} style={styles.mapaLeyendaItem}><View style={[styles.mapaLeyendaDot, { backgroundColor: color }]} /><Text style={styles.mapaLeyendaTexto}>{label}</Text></View>
-                        ))}
-                      </View>
-                      <TouchableOpacity style={styles.mapaRefreshBoton} onPress={() => { setCorrelaciones([]); cargarCorrelaciones(posicionesAgrupadas); }}>
-                        <Text style={styles.mapaRefreshTexto}>↻ Recalcular</Text>
-                      </TouchableOpacity>
-                    </>
-                  ) : <Text style={styles.mapaLoadingTexto}>No hay datos suficientes</Text>}
-                </View>
-              )}
-            </View>
-          )}
+          <TouchableOpacity style={styles.verRendimientoBoton} onPress={() => router.push('/rendimiento')}>
+            <Text style={styles.verRendimientoTexto}>Ver rendimiento completo →</Text>
+          </TouchableOpacity>
         </>
       )}
 
@@ -645,73 +659,54 @@ export default function Inicio() {
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.bg },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 12 },
-  appNombre: { color: theme.white, fontSize: 20, fontWeight: '800' },
-  perfilBoton: { width: 34, height: 34, borderRadius: 17, backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, alignItems: 'center', justifyContent: 'center' },
-  botonAgregar: { backgroundColor: theme.green, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
-  botonAgregarTexto: { color: '#000', fontWeight: '700', fontSize: 13 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 20, paddingBottom: 8 },
+  saludo: { color: theme.gray, fontSize: 13 },
+  nombreUsuario: { color: theme.white, fontSize: 22, fontWeight: '800', marginTop: 2 },
+  perfilBoton: { width: 36, height: 36, borderRadius: 18, backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, alignItems: 'center', justifyContent: 'center' },
   toggleMoneda: { flexDirection: 'row', backgroundColor: theme.card, borderRadius: 20, borderWidth: 1, borderColor: theme.border, overflow: 'hidden' },
   toggleBtn: { paddingHorizontal: 12, paddingVertical: 7 },
   toggleBtnTexto: { fontSize: 12, fontWeight: '800', color: theme.gray },
   loadingContainer: { alignItems: 'center', marginTop: 80 },
-  totalContainer: { alignItems: 'center', paddingVertical: 20 },
+  // Gráfico card
+  graficoCard: { backgroundColor: theme.card, borderRadius: 20, marginHorizontal: 20, marginTop: 16, marginBottom: 16, padding: 20, borderWidth: 1, borderColor: theme.border },
   totalLabel: { color: theme.gray, fontSize: 11, letterSpacing: 1 },
-  totalValor: { color: theme.white, fontSize: 36, fontWeight: '800', marginTop: 6 },
-  variacionBadge: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 5, marginTop: 8 },
-  variacionTexto: { fontSize: 13, fontWeight: '700' },
-  cclTexto: { color: theme.gray, fontSize: 11, marginTop: 6 },
-  verRendimientoBoton: { marginTop: 12, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: theme.green + '55' },
-  verRendimientoTexto: { color: theme.green, fontSize: 13, fontWeight: '600' },
+  totalValor: { color: theme.white, fontSize: 34, fontWeight: '800', marginTop: 4 },
+  variacionBadge: { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4 },
+  variacionTexto: { fontSize: 12, fontWeight: '700' },
+  cclTexto: { color: theme.gray, fontSize: 11 },
+  periodoRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 },
+  periodoBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
+  periodoBtnTexto: { color: theme.gray, fontSize: 12, fontWeight: '600' },
+  // Tarjetas
   tarjetasRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, marginBottom: 24 },
   tarjeta: { flex: 1, backgroundColor: theme.card, borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: theme.border },
   tarjetaLabel: { color: theme.gray, fontSize: 10 },
   tarjetaValor: { color: theme.white, fontSize: 13, fontWeight: '700', marginTop: 4 },
+  // Sección
   seccionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 12 },
   seccionTituloInline: { color: theme.white, fontSize: 16, fontWeight: '700' },
-  seccionTitulo: { color: theme.white, fontSize: 16, fontWeight: '700', paddingHorizontal: 20, marginBottom: 12 },
   seccionBotonPlus: { width: 28, height: 28, borderRadius: 14, backgroundColor: theme.green, alignItems: 'center', justifyContent: 'center' },
   seccionBotonPlusTexto: { color: '#000', fontSize: 18, fontWeight: '700', lineHeight: 22 },
   emptyContainer: { alignItems: 'center', marginTop: 40, gap: 16 },
   emptyTexto: { color: theme.gray, fontSize: 14 },
   botonAgregarEmpty: { backgroundColor: theme.green, borderRadius: 20, paddingHorizontal: 20, paddingVertical: 10 },
-  tabla: { backgroundColor: theme.card, borderRadius: 12, marginHorizontal: 20, marginBottom: 20, paddingHorizontal: 16, borderWidth: 1, borderColor: theme.border },
-  fila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.border },
-  filaIcono: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  filaIconoTexto: { fontWeight: '800', fontSize: 16 },
-  filaTicker: { color: theme.white, fontWeight: '700', fontSize: 15 },
-  filaNombre: { color: theme.lgray, fontSize: 11, marginTop: 1 },
-  filaCantidad: { color: theme.gray, fontSize: 10, marginTop: 2 },
-  filaValor: { color: theme.white, fontWeight: '700', fontSize: 14 },
-  filaGP: { fontSize: 12, fontWeight: '600', marginTop: 2 },
-  etiqOriginal: { color: theme.gray, fontSize: 9, marginTop: 1 },
+  botonAgregarTexto: { color: '#000', fontWeight: '700', fontSize: 13 },
+  // Tabla activos
+  tabla: { backgroundColor: theme.card, borderRadius: 12, marginHorizontal: 20, marginBottom: 16, paddingHorizontal: 16, borderWidth: 1, borderColor: theme.border },
+  fila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.border },
+  filaIcono: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  filaIconoTexto: { fontWeight: '800', fontSize: 15 },
+  filaTicker: { color: theme.white, fontWeight: '700', fontSize: 14 },
+  filaNombre: { color: theme.lgray, fontSize: 10, marginTop: 1 },
+  filaCantidad: { color: theme.gray, fontSize: 9, marginTop: 1 },
+  filaValor: { color: theme.white, fontWeight: '700', fontSize: 13 },
+  filaGP: { fontSize: 11, fontWeight: '600', marginTop: 1 },
+  filaPct: { color: theme.gray, fontSize: 9, marginTop: 1 },
   menuBoton: { padding: 8 },
   menuPuntos: { color: theme.gray, fontSize: 20, fontWeight: '700' },
-  subPosContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.card2, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 4 },
-  subPosTexto: { color: theme.white, fontSize: 12, fontWeight: '600' },
-  subPosFecha: { color: theme.gray, fontSize: 10, marginTop: 2 },
-  subPosBoton: { paddingHorizontal: 8, paddingVertical: 4 },
-  mapaHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingRight: 20 },
-  mapaToggle: { color: theme.gray, fontSize: 14, paddingBottom: 12 },
-  mapaContainer: { backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 20, padding: 16, borderWidth: 1, borderColor: theme.border },
-  mapaLoading: { alignItems: 'center', gap: 10, paddingVertical: 24 },
-  mapaLoadingTexto: { color: theme.gray, fontSize: 13 },
-  mapaHeaderCell: { height: 36, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
-  mapaHeaderTexto: { color: theme.lgray, fontSize: 9, fontWeight: '700', textAlign: 'center' },
-  mapaRowLabel: { height: 52, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
-  mapaCell: { alignItems: 'center', justifyContent: 'center', margin: 1, borderRadius: 6 },
-  mapaCellValor: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
-  mapaCellLabel: { color: '#FFFFFF99', fontSize: 7, marginTop: 1 },
-  mapaFuentesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
-  mapaFuenteItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  mapaFuenteDot: { width: 8, height: 8, borderRadius: 4 },
-  mapaFuenteTexto: { color: theme.gray, fontSize: 10 },
-  mapaFuenteNota: { color: theme.gray, fontSize: 10, marginTop: 6 },
-  mapaLeyendaRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
-  mapaLeyendaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  mapaLeyendaDot: { width: 10, height: 10, borderRadius: 3 },
-  mapaLeyendaTexto: { color: theme.gray, fontSize: 9 },
-  mapaRefreshBoton: { alignSelf: 'center', marginTop: 14, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: theme.green + '55' },
-  mapaRefreshTexto: { color: theme.green, fontSize: 12, fontWeight: '600' },
+  verRendimientoBoton: { marginHorizontal: 20, marginBottom: 30, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: theme.green + '55', alignItems: 'center' },
+  verRendimientoTexto: { color: theme.green, fontSize: 13, fontWeight: '600' },
+  // Modales
   modalOverlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'flex-end' },
   modalContainer: { backgroundColor: theme.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: theme.border, maxHeight: '90%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
@@ -735,6 +730,10 @@ const getStyles = (theme: any) => StyleSheet.create({
   menuOpcionTexto: { flex: 1, color: theme.white, fontSize: 15, fontWeight: '600' },
   menuOpcionFlecha: { color: theme.gray, fontSize: 18 },
   menuDivider: { height: 1, backgroundColor: theme.border, marginVertical: 4 },
+  subPosContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.card2, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 4 },
+  subPosTexto: { color: theme.white, fontSize: 12, fontWeight: '600' },
+  subPosFecha: { color: theme.gray, fontSize: 10, marginTop: 2 },
+  subPosBoton: { paddingHorizontal: 8, paddingVertical: 4 },
   sugerenciasContainer: { backgroundColor: theme.card2, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: theme.border, overflow: 'hidden' },
   sugerenciaFila: { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: theme.border, gap: 10 },
   sugerenciaIcono: { width: 34, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },

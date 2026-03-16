@@ -22,6 +22,7 @@ CER_BONOS = [
     "DICP.BA", "PARP.BA",
     "X18F5.BA", "X21A5.BA", "X16G5.BA", "X17O5.BA",
     "CUAP.BA", "PR13.BA",
+    "TZX26.BA", "TZX27.BA", "TZX28.BA",
 ]
 
 # Ratio CEDEARs de acciones: 1 CEDEAR = 1/N acción original

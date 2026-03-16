@@ -23,19 +23,14 @@ export default function TabLayout() {
         tabBarInactiveTintColor: theme.gray,
       }}>
 
-      <Tabs.Screen name="herramientas" options={{
-        title: 'Herramientas',
-        tabBarIcon: ({ color }) => <TabIcon emoji="🧮" color={color} />,
+      <Tabs.Screen name="index" options={{
+        title: 'Inicio',
+        tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} />,
       }} />
 
       <Tabs.Screen name="mercado" options={{
         title: 'Mercado',
         tabBarIcon: ({ color }) => <TabIcon emoji="📰" color={color} />,
-      }} />
-
-      <Tabs.Screen name="index" options={{
-        title: 'Inicio',
-        tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} />,
       }} />
 
       <Tabs.Screen name="graficos" options={{
@@ -48,7 +43,12 @@ export default function TabLayout() {
         tabBarIcon: ({ color }) => <TabIcon emoji="📋" color={color} />,
       }} />
 
-      {/* Tabs ocultos del tab bar — accesibles por navegación interna */}
+      <Tabs.Screen name="herramientas" options={{
+        title: 'Herramientas',
+        tabBarIcon: ({ color }) => <TabIcon emoji="🧮" color={color} />,
+      }} />
+
+      {/* Ocultos del tab bar */}
       <Tabs.Screen name="calendario" options={{ href: null }} />
       <Tabs.Screen name="perfil" options={{ href: null }} />
       <Tabs.Screen name="explore" options={{ href: null }} />

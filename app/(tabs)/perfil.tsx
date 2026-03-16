@@ -3,9 +3,11 @@ import { useTheme } from '@/lib/theme';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function Perfil() {
   const { theme, isDark, toggleTheme } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = getStyles(theme);
 
   const [nombreUsuario, setNombreUsuario] = useState('');
@@ -18,9 +20,7 @@ export default function Perfil() {
   const [mep, setMep] = useState(0);
   const [cargando, setCargando] = useState(true);
 
-  useEffect(() => {
-    cargarDatos();
-  }, []);
+  useEffect(() => { cargarDatos(); }, []);
 
   async function cargarDatos() {
     setCargando(true);
@@ -32,17 +32,23 @@ export default function Perfil() {
     const anio = fecha.getFullYear();
     setMiembroDesde(`Miembro desde ${mes.charAt(0).toUpperCase() + mes.slice(1)} ${anio}`);
 
-    const email = user.email ?? '';
-    const nombreBase = email.split('@')[0];
-    const nombre = nombreBase.charAt(0).toUpperCase() + nombreBase.slice(1);
-    setNombreUsuario(nombre);
-    setIniciales(nombre.slice(0, 2).toUpperCase());
-
-    const [{ data: posiciones }, { data: operaciones }, { data: precios }] = await Promise.all([
+    const [{ data: posiciones }, { data: operaciones }, { data: precios }, { data: userData }] = await Promise.all([
       supabase.from('posiciones').select('*').eq('usuario_id', user.id),
       supabase.from('operaciones').select('id').eq('usuario_id', user.id),
       supabase.from('precios_cache').select('ticker, precio'),
+      supabase.from('usuarios').select('nombre').eq('id', user.id).single(),
     ]);
+
+    // Nombre: primero tabla usuarios, fallback email
+    let nombre = '';
+    if (userData?.nombre && !userData.nombre.includes('@')) {
+      nombre = userData.nombre;
+    } else {
+      const emailBase = (user.email ?? '').split('@')[0];
+      nombre = emailBase.charAt(0).toUpperCase() + emailBase.slice(1);
+    }
+    setNombreUsuario(nombre);
+    setIniciales(nombre.slice(0, 2).toUpperCase());
 
     setCantActivos(posiciones?.length ?? 0);
     setCantOperaciones(operaciones?.length ?? 0);
@@ -55,14 +61,12 @@ export default function Perfil() {
     if (posiciones && precios) {
       const mapaPrecios: Record<string, number> = {};
       precios.forEach(p => { mapaPrecios[p.ticker] = p.precio; });
-
       const totalInvertido = posiciones.reduce((s, p) => s + p.cantidad * p.precio_compra, 0);
       const totalActual = posiciones.reduce((s, p) => {
         const key = p.categoria === 'cedear' ? `${p.ticker}.BA` : p.ticker;
         const precio = mapaPrecios[key] ?? mapaPrecios[p.ticker] ?? p.precio_compra;
         return s + p.cantidad * precio;
       }, 0);
-
       const rent = totalInvertido > 0 ? ((totalActual - totalInvertido) / totalInvertido) * 100 : 0;
       setRentabilidad(rent);
     }
@@ -81,9 +85,12 @@ export default function Perfil() {
   ];
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
 
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBoton}>
+          <Text style={styles.backTexto}>‹ Volver</Text>
+        </TouchableOpacity>
         <Text style={styles.titulo}>Perfil 👤</Text>
       </View>
 
@@ -93,7 +100,6 @@ export default function Perfil() {
         </View>
       ) : (
         <>
-          {/* AVATAR */}
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
               <Text style={styles.avatarTexto}>{iniciales}</Text>
@@ -105,7 +111,6 @@ export default function Perfil() {
             </View>
           </View>
 
-          {/* STATS */}
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
               <Text style={[styles.statValor, { color: rentabilidad >= 0 ? theme.green : theme.red }]}>
@@ -123,7 +128,6 @@ export default function Perfil() {
             </View>
           </View>
 
-          {/* UPGRADE BANNER */}
           <TouchableOpacity style={styles.upgradeBanner}>
             <View>
               <Text style={styles.upgradeTitle}>🚀 Pasate a Premium</Text>
@@ -132,7 +136,6 @@ export default function Perfil() {
             <Text style={styles.upgradePrecio}>USD 4.99/mes →</Text>
           </TouchableOpacity>
 
-          {/* OPCIONES */}
           <View style={styles.tabla}>
             {opciones.map((op, i) => (
               <TouchableOpacity
@@ -153,17 +156,8 @@ export default function Perfil() {
                   <Text style={styles.opcionDesc}>{op.desc}</Text>
                 </View>
                 {op.label === 'Modo oscuro'
-                  ? <View style={{
-                      width: 44, height: 26, borderRadius: 13,
-                      backgroundColor: isDark ? theme.green : theme.border,
-                      justifyContent: 'center',
-                      paddingHorizontal: 3,
-                    }}>
-                      <View style={{
-                        width: 20, height: 20, borderRadius: 10,
-                        backgroundColor: '#FFF',
-                        alignSelf: isDark ? 'flex-end' : 'flex-start',
-                      }} />
+                  ? <View style={{ width: 44, height: 26, borderRadius: 13, backgroundColor: isDark ? theme.green : theme.border, justifyContent: 'center', paddingHorizontal: 3 }}>
+                      <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFF', alignSelf: isDark ? 'flex-end' : 'flex-start' }} />
                     </View>
                   : <Text style={styles.opcionFlecha}>›</Text>
                 }
@@ -171,21 +165,21 @@ export default function Perfil() {
             ))}
           </View>
 
-          {/* FOOTER */}
           <View style={styles.footer}>
             <Text style={styles.footerTexto}>A Contar · v0.1</Text>
             <Text style={styles.footerTexto}>Hecho en Argentina 🇦🇷</Text>
           </View>
         </>
       )}
-
     </ScrollView>
   );
 }
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.bg },
-  header: { padding: 20, paddingTop: 60 },
+  header: { paddingHorizontal: 20, paddingBottom: 8 },
+  backBoton: { marginBottom: 8 },
+  backTexto: { color: theme.green, fontSize: 15, fontWeight: '600' },
   titulo: { color: theme.white, fontSize: 22, fontWeight: '800' },
   loadingContainer: { alignItems: 'center', marginTop: 80 },
   avatarContainer: { alignItems: 'center', paddingVertical: 20 },

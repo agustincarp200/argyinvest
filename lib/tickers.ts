@@ -142,6 +142,9 @@ export const TICKERS_CONOCIDOS: TickerSugerido[] = [
   { ticker: 'CUAP', nombre: 'CUAP - Cuasi Par', categoria: 'bono_ars', moneda: 'ARS' },
   { ticker: 'PR13', nombre: 'PR13 - Préstamos Garantizados', categoria: 'bono_ars', moneda: 'ARS' },
   { ticker: 'TZXD5', nombre: 'Bono Dollar-Linked Dic 2025', categoria: 'bono_ars', moneda: 'ARS' },
+  { ticker: 'TZX26', nombre: 'Boncer CER Cupón Cero Jun 2026', categoria: 'bono_ars', moneda: 'ARS' },
+  { ticker: 'TZX27', nombre: 'Boncer CER Cupón Cero Jun 2027', categoria: 'bono_ars', moneda: 'ARS' },
+  { ticker: 'TZX28', nombre: 'Boncer CER Cupón Cero Jun 2028', categoria: 'bono_ars', moneda: 'ARS' },
 
   // Letras
   { ticker: 'S31E5', nombre: 'LECAP Ene 2025', categoria: 'letra', moneda: 'ARS' },
