@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import { COLORES_CATEGORIA } from '@/lib/tickers';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,7 +36,17 @@ function inferirCategoria(ticker: string): string {
   return 'byma';
 }
 
-function inferirMoneda(categoria: string): string {
+// Determinar moneda real leyendo la columna "Tipo Cuenta" de IOL
+// Si la cuenta es en dólares → USD, si es en pesos → ARS
+function inferirMonedaPorCuenta(tipoCuenta: string, categoria: string): string {
+  const lower = tipoCuenta.toLowerCase();
+  if (lower.includes('dólar') || lower.includes('dolar') || lower.includes('usd') || lower.includes('dollar')) {
+    return 'USD';
+  }
+  if (lower.includes('peso') || lower.includes('pesos')) {
+    return 'ARS';
+  }
+  // Fallback por categoría
   if (['bono_usd', 'nasdaq', 'crypto'].includes(categoria)) return 'USD';
   return 'ARS';
 }
@@ -90,8 +100,29 @@ function parsearArchivoIOL(html: string): OperacionImportada[] {
     const precio = parsearNumeroIOL(celdas[7] || '0');
     const comision = parsearNumeroIOL(celdas[8] || '0');
     if (cantidad <= 0 || precio <= 0) continue;
+
     const categoria = inferirCategoria(parsed.ticker);
-    ops.push({ ticker: parsed.ticker, tipo: parsed.tipo, fecha, cantidad, precio, comision, moneda: inferirMoneda(categoria), categoria, seleccionada: true });
+
+    // Leer Tipo Cuenta (columna 13) para determinar moneda real
+    const tipoCuenta = celdas[13] ?? '';
+    const moneda = inferirMonedaPorCuenta(tipoCuenta, categoria);
+
+    // Bonos y letras cotizan por cada $100 VN en IOL → convertir a precio unitario
+    const precioFinal = ['bono_ars', 'bono_usd', 'letra'].includes(categoria)
+      ? precio / 100
+      : precio;
+
+    ops.push({
+      ticker: parsed.ticker,
+      tipo: parsed.tipo,
+      fecha,
+      cantidad,
+      precio: precioFinal,
+      comision,
+      moneda,
+      categoria,
+      seleccionada: true,
+    });
   }
   return ops;
 }
@@ -112,7 +143,16 @@ export default function Herramientas() {
       const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
       if (result.canceled) return;
       const file = result.assets[0];
-      const contenido = await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.UTF8 });
+
+      const base64 = await FileSystem.readAsStringAsync(file.uri, {
+        encoding: 'base64' as any,
+      });
+      const binStr = atob(base64);
+      let contenido = '';
+      for (let i = 0; i < binStr.length; i++) {
+        contenido += String.fromCharCode(binStr.charCodeAt(i));
+      }
+
       const ops = parsearArchivoIOL(contenido);
       if (ops.length === 0) {
         Alert.alert('Sin operaciones', 'No se encontraron compras o ventas. Verificá que sea el historial de movimientos de IOL.');
@@ -121,7 +161,7 @@ export default function Herramientas() {
       setOperaciones(ops);
       setPaso('preview');
     } catch (e) {
-      Alert.alert('Error', 'No se pudo leer el archivo.');
+      Alert.alert('Error', `No se pudo leer el archivo: ${e}`);
     }
   }
 
@@ -155,7 +195,7 @@ export default function Herramientas() {
       setProgreso(Math.round(((i + 1) / seleccionadas.length) * 100));
     }
 
-    // Calcular y guardar posiciones netas
+    // Calcular posiciones netas
     const compras = seleccionadas.filter(o => o.tipo === 'COMPRA');
     const ventas = seleccionadas.filter(o => o.tipo === 'VENTA');
     const neto: Record<string, { cantidad: number; costoTotal: number; op: OperacionImportada; fechaMin: string }> = {};
@@ -208,21 +248,18 @@ export default function Herramientas() {
       {paso === 'inicio' && (
         <View style={styles.seccion}>
           <Text style={styles.seccionTitulo}>Importar desde broker</Text>
-
           <TouchableOpacity style={styles.importCard} onPress={seleccionarArchivo}>
             <View style={styles.importIcono}><Text style={{ fontSize: 32 }}>📥</Text></View>
             <Text style={styles.importTitulo}>IOL InvertirOnline</Text>
             <Text style={styles.importDesc}>Importá tu historial de movimientos directamente desde el archivo XLS de IOL. Carga automática de operaciones y posiciones.</Text>
             <View style={styles.importBoton}><Text style={styles.importBotonTexto}>Seleccionar archivo →</Text></View>
           </TouchableOpacity>
-
           <View style={styles.instruccionesCard}>
             <Text style={styles.instruccionesTitulo}>¿Cómo exportar desde IOL?</Text>
             {['1. Ingresá a InvertirOnline', '2. Ir a "Mis inversiones" → "Movimientos"', '3. Seleccioná el período a importar', '4. Hacé click en "Exportar" → "Excel"', '5. Subí el archivo acá'].map((p, i) => (
               <Text key={i} style={styles.instruccionesTexto}>{p}</Text>
             ))}
           </View>
-
           <View style={styles.proximamenteCard}>
             <Text style={styles.instruccionesTitulo}>Próximamente</Text>
             <View style={styles.proximamenteRow}>
@@ -245,7 +282,6 @@ export default function Herramientas() {
               <Text style={styles.toggleTodasTexto}>{operaciones.every(o => o.seleccionada) ? 'Deselec. todas' : 'Selec. todas'}</Text>
             </TouchableOpacity>
           </View>
-
           <View style={styles.tabla}>
             {operaciones.map((op, i) => {
               const catColor = COLORES_CATEGORIA[op.categoria] ?? '#888';
@@ -263,17 +299,17 @@ export default function Herramientas() {
                       <View style={[styles.opCategoriaBadge, { backgroundColor: catColor + '22' }]}>
                         <Text style={[styles.opCategoriaTexto, { color: catColor }]}>{op.categoria.replace('_', ' ')}</Text>
                       </View>
+                      <Text style={[styles.opMonedaBadge, { color: op.moneda === 'USD' ? '#00D26A' : '#F5C842' }]}>{op.moneda}</Text>
                     </View>
-                    <Text style={styles.opDetalle}>{op.cantidad} u. × ${op.precio.toLocaleString('es-AR')} · {op.fecha.split('-').reverse().join('/')}</Text>
+                    <Text style={styles.opDetalle}>{op.cantidad} u. × {op.moneda === 'USD' ? 'u$s' : '$'}{op.precio.toLocaleString('es-AR')} · {op.fecha.split('-').reverse().join('/')}</Text>
                   </View>
                   <Text style={[styles.opMonto, { color: op.tipo === 'COMPRA' ? '#FF4D4D' : '#00D26A' }]}>
-                    {op.tipo === 'COMPRA' ? '-' : '+'}${(op.cantidad * op.precio).toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+                    {op.tipo === 'COMPRA' ? '-' : '+'}{op.moneda === 'USD' ? 'u$s' : '$'}{(op.cantidad * op.precio).toLocaleString('es-AR', { maximumFractionDigits: 0 })}
                   </Text>
                 </TouchableOpacity>
               );
             })}
           </View>
-
           <View style={styles.botonesRow}>
             <TouchableOpacity style={styles.botonSecundario} onPress={reiniciar}>
               <Text style={styles.botonSecundarioTexto}>← Cancelar</Text>
@@ -348,6 +384,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   opTicker: { color: theme.white, fontWeight: '700', fontSize: 14 },
   opCategoriaBadge: { borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
   opCategoriaTexto: { fontSize: 9, fontWeight: '700' },
+  opMonedaBadge: { fontSize: 9, fontWeight: '800' },
   opDetalle: { color: theme.gray, fontSize: 10, marginTop: 2 },
   opMonto: { fontSize: 12, fontWeight: '700' },
   botonesRow: { flexDirection: 'row', gap: 10 },

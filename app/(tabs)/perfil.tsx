@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function Perfil() {
@@ -39,7 +39,6 @@ export default function Perfil() {
       supabase.from('usuarios').select('nombre').eq('id', user.id).single(),
     ]);
 
-    // Nombre: primero tabla usuarios, fallback email
     let nombre = '';
     if (userData?.nombre && !userData.nombre.includes('@')) {
       nombre = userData.nombre;
@@ -74,6 +73,44 @@ export default function Perfil() {
     setCargando(false);
   }
 
+  async function vaciarCartera() {
+    Alert.alert(
+      'Vaciar cartera',
+      '¿Seguro? Se eliminarán todas tus posiciones. El historial de operaciones se mantiene.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Vaciar', style: 'destructive', onPress: async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            const { error } = await supabase.from('posiciones').delete().eq('usuario_id', user.id);
+            if (error) Alert.alert('Error', error.message);
+            else { Alert.alert('Listo', 'Cartera vaciada correctamente.'); cargarDatos(); }
+          }
+        }
+      ]
+    );
+  }
+
+  async function vaciarHistorial() {
+    Alert.alert(
+      'Vaciar historial',
+      '¿Seguro? Se eliminarán todas las operaciones registradas.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Vaciar', style: 'destructive', onPress: async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            const { error } = await supabase.from('operaciones').delete().eq('usuario_id', user.id);
+            if (error) Alert.alert('Error', error.message);
+            else { Alert.alert('Listo', 'Historial vaciado correctamente.'); cargarDatos(); }
+          }
+        }
+      ]
+    );
+  }
+
   const opciones = [
     { icon: '🔔', label: 'Alertas de precio', desc: 'Stop Loss y Stop Gain' },
     { icon: '💱', label: 'Tipo de cambio', desc: ccl > 0 ? `CCL $${ccl.toLocaleString('es-AR')} · MEP $${mep > 0 ? mep.toLocaleString('es-AR') : 'N/D'}` : 'Cargando...' },
@@ -81,6 +118,8 @@ export default function Perfil() {
     { icon: '📅', label: 'Calendario de pagos', desc: 'Dividendos y vencimientos' },
     { icon: '🌙', label: 'Modo oscuro', desc: isDark ? 'Activo' : 'Inactivo' },
     { icon: '⚙️', label: 'Configuración', desc: 'Cuenta y preferencias' },
+    { icon: '🗑️', label: 'Vaciar cartera', desc: 'Eliminar todas las posiciones' },
+    { icon: '🗂️', label: 'Vaciar historial', desc: 'Eliminar todas las operaciones' },
     { icon: '🚪', label: 'Cerrar sesión', desc: 'Salir de tu cuenta' },
   ];
 
@@ -145,6 +184,8 @@ export default function Perfil() {
                   op.label === 'Calendario de pagos' ? () => router.push('/calendario') :
                   op.label === 'Alertas de precio' ? () => router.push('/alertas') :
                   op.label === 'Modo oscuro' ? toggleTheme :
+                  op.label === 'Vaciar cartera' ? vaciarCartera :
+                  op.label === 'Vaciar historial' ? vaciarHistorial :
                   op.label === 'Cerrar sesión' ? () => supabase.auth.signOut() :
                   undefined
                 }>
@@ -152,7 +193,12 @@ export default function Perfil() {
                   <Text style={{ fontSize: 18 }}>{op.icon}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.opcionLabel, op.label === 'Cerrar sesión' && { color: theme.red }]}>{op.label}</Text>
+                  <Text style={[
+                    styles.opcionLabel,
+                    op.label === 'Cerrar sesión' && { color: theme.red },
+                    op.label === 'Vaciar cartera' && { color: theme.red },
+                    op.label === 'Vaciar historial' && { color: theme.red },
+                  ]}>{op.label}</Text>
                   <Text style={styles.opcionDesc}>{op.desc}</Text>
                 </View>
                 {op.label === 'Modo oscuro'

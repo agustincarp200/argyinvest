@@ -14,7 +14,11 @@ supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 CEDEARS = ["AAPL", "GOOGL", "MSFT", "AMZN", "NVDA", "META", "TSLA", "AMD", "BABA", "MELI"]
 NASDAQ  = ["AAPL", "GOOGL", "MSFT", "AMZN", "NVDA", "META", "TSLA", "AMD", "BABA", "MELI"]
 CRYPTO  = ["bitcoin", "ethereum", "solana", "cardano", "tether"]
-BYMA    = ["GGAL.BA", "PAMP.BA", "BMA.BA", "ALUA.BA", "TXAR.BA", "CRES.BA", "CEPU.BA", "LOMA.BA", "VALO.BA", "SUPV.BA"]
+BYMA    = [
+    "GGAL.BA", "PAMP.BA", "BMA.BA", "ALUA.BA", "TXAR.BA",
+    "CRES.BA", "CEPU.BA", "LOMA.BA", "VALO.BA", "SUPV.BA",
+    "VIST.BA",
+]
 
 # Bonos y letras CER — Yahoo primero, coeficiente diario como fallback
 CER_BONOS = [
@@ -23,68 +27,44 @@ CER_BONOS = [
     "X18F5.BA", "X21A5.BA", "X16G5.BA", "X17O5.BA",
     "CUAP.BA", "PR13.BA",
     "TZX26.BA", "TZX27.BA", "TZX28.BA",
+    "S31G6.BA", "S30O6.BA",
 ]
 
 # Ratio CEDEARs de acciones: 1 CEDEAR = 1/N acción original
 CEDEAR_RATIO = {
-    "AAPL":  1/20,    # 20:1
-    "GOOGL": 1/58,    # 58:1
-    "MSFT":  1/25,    # 25:1
-    "AMZN":  1/144,   # 144:1
-    "NVDA":  1/10,    # 10:1
-    "META":  1/10,    # 10:1
-    "TSLA":  1/15,    # 15:1
-    "AMD":   1/10,    # 10:1
-    "BABA":  1/9,     # 9:1
-    "MELI":  1/100,   # 100:1
+    "AAPL":  1/20,
+    "GOOGL": 1/58,
+    "MSFT":  1/25,
+    "AMZN":  1/144,
+    "NVDA":  1/10,
+    "META":  1/10,
+    "TSLA":  1/15,
+    "AMD":   1/10,
+    "BABA":  1/9,
+    "MELI":  1/100,
 }
 
 # ── ETFs CEDEAR ────────────────────────────────────────
 CEDEARS_ETF = [
-    "SPY", "QQQ", "IVV",
-    "DIA",
-    "IWM",
-    "EEM", "IEMG", "ACWI",
-    "EFA", "IEUR", "EWJ",
-    "XLE", "XLF",
-    "EWZ",
+    "SPY", "QQQ", "IVV", "DIA", "IWM",
+    "EEM", "IEMG", "ACWI", "EFA", "IEUR", "EWJ",
+    "XLE", "XLF", "EWZ",
     "GLD", "SLV", "GDX",
     "ARKK", "IBB",
     "IBIT", "ETHA",
     "SH", "PSQ",
     "VIG", "IJH",
-    "USO",
-    "FXI",
+    "USO", "FXI",
 ]
 
 CEDEAR_ETF_RATIO = {
-    "SPY":  1/20,
-    "QQQ":  1/20,
-    "IVV":  1/20,
-    "DIA":  1/20,
-    "IWM":  1/10,
-    "EEM":  1/5,
-    "IEMG": 1/12,
-    "ACWI": 1/26,
-    "EFA":  1/18,
-    "IEUR": 1/11,
-    "EWJ":  1/14,
-    "XLE":  1/2,
-    "XLF":  1/2,
-    "EWZ":  1/2,
-    "GLD":  1/50,
-    "SLV":  1/6,
-    "GDX":  1/10,
-    "ARKK": 1/10,
-    "IBB":  1/27,
-    "IBIT": 1/10,
-    "ETHA": 1/5,
-    "SH":   1/8,
-    "PSQ":  1/8,
-    "VIG":  1/39,
-    "IJH":  1/12,
-    "USO":  1/15,
-    "FXI":  1/5,
+    "SPY":  1/20, "QQQ":  1/20, "IVV":  1/20, "DIA":  1/20,
+    "IWM":  1/10, "EEM":  1/5,  "IEMG": 1/12, "ACWI": 1/26,
+    "EFA":  1/18, "IEUR": 1/11, "EWJ":  1/14, "XLE":  1/2,
+    "XLF":  1/2,  "EWZ":  1/2,  "GLD":  1/50, "SLV":  1/6,
+    "GDX":  1/10, "ARKK": 1/10, "IBB":  1/27, "IBIT": 1/10,
+    "ETHA": 1/5,  "SH":   1/8,  "PSQ":  1/8,  "VIG":  1/39,
+    "IJH":  1/12, "USO":  1/15, "FXI":  1/5,
 }
 
 # ── DOLAR ──────────────────────────────────────────────
@@ -377,6 +357,104 @@ def verificar_alertas(precios_map):
     except Exception as e:
         print(f"❌ Error verificando alertas: {e}")
 
+# ── EVENTOS CALENDARIO ────────────────────────────────
+BOND_EVENTS = [
+    {"ticker": "AL29", "tipo": "cupon",        "fecha": "2026-07-09", "monto": 1.75,  "moneda": "USD", "desc": "Cupón AL29"},
+    {"ticker": "AL29", "tipo": "cupon",        "fecha": "2027-01-09", "monto": 1.75,  "moneda": "USD", "desc": "Cupón AL29"},
+    {"ticker": "AL29", "tipo": "amortizacion", "fecha": "2027-01-09", "monto": 4.0,   "moneda": "USD", "desc": "Amort. AL29"},
+    {"ticker": "AL29", "tipo": "amortizacion", "fecha": "2029-07-09", "monto": 96.0,  "moneda": "USD", "desc": "Vto. AL29"},
+    {"ticker": "AL30", "tipo": "cupon",        "fecha": "2026-07-09", "monto": 0.50,  "moneda": "USD", "desc": "Cupón AL30"},
+    {"ticker": "AL30", "tipo": "cupon",        "fecha": "2027-01-09", "monto": 0.50,  "moneda": "USD", "desc": "Cupón AL30"},
+    {"ticker": "AL30", "tipo": "cupon",        "fecha": "2027-07-09", "monto": 0.50,  "moneda": "USD", "desc": "Cupón AL30"},
+    {"ticker": "AL30", "tipo": "amortizacion", "fecha": "2030-07-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. AL30"},
+    {"ticker": "AL35", "tipo": "cupon",        "fecha": "2026-07-09", "monto": 0.75,  "moneda": "USD", "desc": "Cupón AL35"},
+    {"ticker": "AL35", "tipo": "amortizacion", "fecha": "2035-07-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. AL35"},
+    {"ticker": "GD29", "tipo": "cupon",        "fecha": "2026-07-09", "monto": 2.125, "moneda": "USD", "desc": "Cupón GD29"},
+    {"ticker": "GD29", "tipo": "amortizacion", "fecha": "2029-07-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. GD29"},
+    {"ticker": "GD30", "tipo": "cupon",        "fecha": "2026-07-09", "monto": 0.75,  "moneda": "USD", "desc": "Cupón GD30"},
+    {"ticker": "GD30", "tipo": "amortizacion", "fecha": "2030-07-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. GD30"},
+    {"ticker": "GD35", "tipo": "cupon",        "fecha": "2026-07-09", "monto": 1.75,  "moneda": "USD", "desc": "Cupón GD35"},
+    {"ticker": "GD35", "tipo": "amortizacion", "fecha": "2035-01-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. GD35"},
+    {"ticker": "GD38", "tipo": "cupon",        "fecha": "2026-07-09", "monto": 2.50,  "moneda": "USD", "desc": "Cupón GD38"},
+    {"ticker": "GD38", "tipo": "amortizacion", "fecha": "2038-01-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. GD38"},
+    {"ticker": "GD41", "tipo": "cupon",        "fecha": "2026-07-09", "monto": 2.50,  "moneda": "USD", "desc": "Cupón GD41"},
+    {"ticker": "GD41", "tipo": "amortizacion", "fecha": "2041-01-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. GD41"},
+    {"ticker": "GD46", "tipo": "cupon",        "fecha": "2026-07-09", "monto": 3.625, "moneda": "USD", "desc": "Cupón GD46"},
+    {"ticker": "GD46", "tipo": "amortizacion", "fecha": "2046-01-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. GD46"},
+    {"ticker": "TX26", "tipo": "cupon",        "fecha": "2026-05-09", "monto": None,  "moneda": "ARS", "desc": "Cupón CER TX26"},
+    {"ticker": "TX26", "tipo": "amortizacion", "fecha": "2026-11-09", "monto": None,  "moneda": "ARS", "desc": "Vto. TX26"},
+    {"ticker": "TX28", "tipo": "cupon",        "fecha": "2026-05-09", "monto": None,  "moneda": "ARS", "desc": "Cupón CER TX28"},
+    {"ticker": "TX28", "tipo": "cupon",        "fecha": "2026-11-09", "monto": None,  "moneda": "ARS", "desc": "Cupón CER TX28"},
+    {"ticker": "TX28", "tipo": "amortizacion", "fecha": "2028-11-09", "monto": None,  "moneda": "ARS", "desc": "Vto. TX28"},
+    {"ticker": "TZX26", "tipo": "vencimiento", "fecha": "2026-06-30", "monto": None,  "moneda": "ARS", "desc": "Vto. TZX26"},
+    {"ticker": "TZX27", "tipo": "vencimiento", "fecha": "2027-06-30", "monto": None,  "moneda": "ARS", "desc": "Vto. TZX27"},
+    {"ticker": "S30J6",  "tipo": "vencimiento", "fecha": "2026-06-30", "monto": None,  "moneda": "ARS", "desc": "Vto. LECAP Jun 2026"},
+    {"ticker": "S31G6",  "tipo": "vencimiento", "fecha": "2026-07-31", "monto": None,  "moneda": "ARS", "desc": "Vto. LECAP Jul 2026"},
+    {"ticker": "S30O6",  "tipo": "vencimiento", "fecha": "2026-10-30", "monto": None,  "moneda": "ARS", "desc": "Vto. LECAP Oct 2026"},
+    {"ticker": "S31D6",  "tipo": "vencimiento", "fecha": "2026-12-31", "monto": None,  "moneda": "ARS", "desc": "Vto. LECAP Dic 2026"},
+]
+
+DIVIDEND_TICKERS_ACCIONES = [
+    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AMD",
+    "KO", "PEP", "WMT", "JPM", "BAC", "MCD", "NKE", "DIS",
+    "MELI", "BABA", "PYPL", "UBER",
+    "SPY", "QQQ", "IVV", "DIA", "IWM", "GLD", "EEM", "XLE", "XLF",
+    "VIG", "EWZ", "GDX",
+]
+
+def get_dividendos_yahoo(tickers: list) -> list:
+    eventos = []
+    for ticker in tickers:
+        try:
+            t = yf.Ticker(ticker)
+            info = t.info
+            ex_div_date = info.get("exDividendDate")
+            div_rate = info.get("dividendRate") or info.get("trailingAnnualDividendRate")
+            if ex_div_date and div_rate and div_rate > 0:
+                from datetime import timezone
+                fecha = datetime.fromtimestamp(ex_div_date, tz=timezone.utc).strftime("%Y-%m-%d")
+                div_por_pago = round(div_rate / 4, 4)
+                eventos.append({
+                    "ticker": ticker, "tipo": "dividendo", "fecha": fecha,
+                    "monto": div_por_pago, "moneda": "USD", "desc": f"Dividendo {ticker} (ex-date)"
+                })
+                print(f"  💵 {ticker}: ex-div {fecha} · ${div_por_pago:.4f}/acción")
+        except Exception as e:
+            print(f"  ⚠️  {ticker} dividendo error: {e}")
+    return eventos
+
+def actualizar_eventos_calendario():
+    print("\n📅 Actualizando eventos de calendario...")
+    try:
+        from datetime import date
+        hoy = date.today().isoformat()
+        supabase.table("eventos_calendario").delete().gte("fecha", hoy).execute()
+    except Exception as e:
+        print(f"  ⚠️  Error limpiando eventos: {e}")
+
+    todos_eventos = []
+    todos_eventos.extend(BOND_EVENTS)
+    print(f"  📋 Bonos/Letras: {len(BOND_EVENTS)} eventos cargados")
+
+    print("  🔍 Buscando dividendos en Yahoo Finance...")
+    divs = get_dividendos_yahoo(DIVIDEND_TICKERS_ACCIONES)
+    todos_eventos.extend(divs)
+    print(f"  💵 Dividendos encontrados: {len(divs)}")
+
+    insertados = 0
+    for ev in todos_eventos:
+        try:
+            supabase.table("eventos_calendario").insert({
+                "ticker": ev["ticker"], "tipo": ev["tipo"], "fecha": ev["fecha"],
+                "monto_por_unidad": ev.get("monto"), "moneda": ev.get("moneda", "USD"),
+                "descripcion": ev.get("desc", ""),
+            }).execute()
+            insertados += 1
+        except Exception as e:
+            print(f"  ❌ Error insertando {ev['ticker']} {ev['fecha']}: {e}")
+
+    print(f"  ✅ Eventos calendario actualizados: {insertados}")
+
 # ── MAIN ───────────────────────────────────────────────
 def main():
     print("\n🚀 Iniciando worker de precios...")
@@ -460,169 +538,6 @@ def main():
 if __name__ == "__main__":
     import time
     print("⏰ Scheduler iniciado - actualizando cada 5 minutos")
-# ── EVENTOS CALENDARIO ────────────────────────────────
-# Agregar este bloque al final de main.py, antes del scheduler while True
-
-# ── Cronogramas de bonos argentinos (hardcoded, fechas oficiales) ──────────
-BOND_EVENTS = [
-    # AL29 — Bonar 2029 — cupón semestral USD, amortización parcial
-    {"ticker": "AL29", "tipo": "cupon",        "fecha": "2025-07-09", "monto": 1.75,  "moneda": "USD", "desc": "Cupón AL29"},
-    {"ticker": "AL29", "tipo": "cupon",        "fecha": "2026-01-09", "monto": 1.75,  "moneda": "USD", "desc": "Cupón AL29"},
-    {"ticker": "AL29", "tipo": "cupon",        "fecha": "2026-07-09", "monto": 1.75,  "moneda": "USD", "desc": "Cupón AL29"},
-    {"ticker": "AL29", "tipo": "amortizacion", "fecha": "2027-01-09", "monto": 4.0,   "moneda": "USD", "desc": "Amort. AL29"},
-    {"ticker": "AL29", "tipo": "amortizacion", "fecha": "2029-07-09", "monto": 96.0,  "moneda": "USD", "desc": "Vto. AL29"},
-
-    # AL30 — Bonar 2030 — cupón semestral USD
-    {"ticker": "AL30", "tipo": "cupon",        "fecha": "2025-07-09", "monto": 0.50,  "moneda": "USD", "desc": "Cupón AL30"},
-    {"ticker": "AL30", "tipo": "cupon",        "fecha": "2026-01-09", "monto": 0.50,  "moneda": "USD", "desc": "Cupón AL30"},
-    {"ticker": "AL30", "tipo": "cupon",        "fecha": "2026-07-09", "monto": 0.50,  "moneda": "USD", "desc": "Cupón AL30"},
-    {"ticker": "AL30", "tipo": "cupon",        "fecha": "2027-01-09", "monto": 0.50,  "moneda": "USD", "desc": "Cupón AL30"},
-    {"ticker": "AL30", "tipo": "amortizacion", "fecha": "2030-07-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. AL30"},
-
-    # AL35 — Bonar 2035
-    {"ticker": "AL35", "tipo": "cupon",        "fecha": "2025-07-09", "monto": 0.75,  "moneda": "USD", "desc": "Cupón AL35"},
-    {"ticker": "AL35", "tipo": "cupon",        "fecha": "2026-01-09", "monto": 0.75,  "moneda": "USD", "desc": "Cupón AL35"},
-    {"ticker": "AL35", "tipo": "amortizacion", "fecha": "2035-07-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. AL35"},
-
-    # GD29 — Global 2029
-    {"ticker": "GD29", "tipo": "cupon",        "fecha": "2025-07-09", "monto": 2.125, "moneda": "USD", "desc": "Cupón GD29"},
-    {"ticker": "GD29", "tipo": "cupon",        "fecha": "2026-01-09", "monto": 2.125, "moneda": "USD", "desc": "Cupón GD29"},
-    {"ticker": "GD29", "tipo": "amortizacion", "fecha": "2029-07-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. GD29"},
-
-    # GD30 — Global 2030
-    {"ticker": "GD30", "tipo": "cupon",        "fecha": "2025-07-09", "monto": 0.75,  "moneda": "USD", "desc": "Cupón GD30"},
-    {"ticker": "GD30", "tipo": "cupon",        "fecha": "2026-01-09", "monto": 0.75,  "moneda": "USD", "desc": "Cupón GD30"},
-    {"ticker": "GD30", "tipo": "amortizacion", "fecha": "2030-07-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. GD30"},
-
-    # GD35 — Global 2035
-    {"ticker": "GD35", "tipo": "cupon",        "fecha": "2026-01-09", "monto": 1.75,  "moneda": "USD", "desc": "Cupón GD35"},
-    {"ticker": "GD35", "tipo": "amortizacion", "fecha": "2035-01-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. GD35"},
-
-    # GD38 — Global 2038
-    {"ticker": "GD38", "tipo": "cupon",        "fecha": "2025-07-09", "monto": 2.50,  "moneda": "USD", "desc": "Cupón GD38"},
-    {"ticker": "GD38", "tipo": "amortizacion", "fecha": "2038-01-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. GD38"},
-
-    # GD41 — Global 2041
-    {"ticker": "GD41", "tipo": "cupon",        "fecha": "2025-07-09", "monto": 2.50,  "moneda": "USD", "desc": "Cupón GD41"},
-    {"ticker": "GD41", "tipo": "amortizacion", "fecha": "2041-01-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. GD41"},
-
-    # GD46 — Global 2046
-    {"ticker": "GD46", "tipo": "cupon",        "fecha": "2025-07-09", "monto": 3.625, "moneda": "USD", "desc": "Cupón GD46"},
-    {"ticker": "GD46", "tipo": "amortizacion", "fecha": "2046-01-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. GD46"},
-
-    # TX26 — Boncer 2026 — cupón trimestral ARS ajustado CER
-    {"ticker": "TX26", "tipo": "cupon",        "fecha": "2025-05-23", "monto": None, "moneda": "ARS", "desc": "Cupón CER TX26"},
-    {"ticker": "TX26", "tipo": "cupon",        "fecha": "2025-08-23", "monto": None, "moneda": "ARS", "desc": "Cupón CER TX26"},
-    {"ticker": "TX26", "tipo": "cupon",        "fecha": "2025-11-23", "monto": None, "moneda": "ARS", "desc": "Cupón CER TX26"},
-    {"ticker": "TX26", "tipo": "amortizacion", "fecha": "2026-02-23", "monto": None, "moneda": "ARS", "desc": "Vto. TX26"},
-
-    # TX28
-    {"ticker": "TX28", "tipo": "cupon",        "fecha": "2025-05-23", "monto": None, "moneda": "ARS", "desc": "Cupón CER TX28"},
-    {"ticker": "TX28", "tipo": "cupon",        "fecha": "2025-11-23", "monto": None, "moneda": "ARS", "desc": "Cupón CER TX28"},
-    {"ticker": "TX28", "tipo": "amortizacion", "fecha": "2028-05-23", "monto": None, "moneda": "ARS", "desc": "Vto. TX28"},
-
-    # TX30
-    {"ticker": "TX30", "tipo": "cupon",        "fecha": "2025-05-23", "monto": None, "moneda": "ARS", "desc": "Cupón CER TX30"},
-    {"ticker": "TX30", "tipo": "amortizacion", "fecha": "2030-03-21", "monto": None, "moneda": "ARS", "desc": "Vto. TX30"},
-
-    # Letras LECAP — solo vencimiento
-    {"ticker": "S30A5", "tipo": "vencimiento", "fecha": "2025-04-30", "monto": None, "moneda": "ARS", "desc": "Vto. LECAP Abr 2025"},
-    {"ticker": "S30Y5", "tipo": "vencimiento", "fecha": "2025-05-30", "monto": None, "moneda": "ARS", "desc": "Vto. LECAP May 2025"},
-    {"ticker": "S18J5", "tipo": "vencimiento", "fecha": "2025-06-18", "monto": None, "moneda": "ARS", "desc": "Vto. LECAP Jun 2025"},
-    {"ticker": "S31L5", "tipo": "vencimiento", "fecha": "2025-07-31", "monto": None, "moneda": "ARS", "desc": "Vto. LECAP Jul 2025"},
-    {"ticker": "S29G5", "tipo": "vencimiento", "fecha": "2025-08-29", "monto": None, "moneda": "ARS", "desc": "Vto. LECAP Ago 2025"},
-    {"ticker": "S30S5", "tipo": "vencimiento", "fecha": "2025-09-30", "monto": None, "moneda": "ARS", "desc": "Vto. LECAP Sep 2025"},
-    {"ticker": "S31O5", "tipo": "vencimiento", "fecha": "2025-10-31", "monto": None, "moneda": "ARS", "desc": "Vto. LECAP Oct 2025"},
-    {"ticker": "S28N5", "tipo": "vencimiento", "fecha": "2025-11-28", "monto": None, "moneda": "ARS", "desc": "Vto. LECAP Nov 2025"},
-    {"ticker": "S31D5", "tipo": "vencimiento", "fecha": "2025-12-31", "monto": None, "moneda": "ARS", "desc": "Vto. LECAP Dic 2025"},
-    {"ticker": "S30J6", "tipo": "vencimiento", "fecha": "2026-06-30", "monto": None, "moneda": "ARS", "desc": "Vto. LECAP Jun 2026"},
-    {"ticker": "S31D6", "tipo": "vencimiento", "fecha": "2026-12-31", "monto": None, "moneda": "ARS", "desc": "Vto. LECAP Dic 2026"},
-
-    # LECER
-    {"ticker": "X18F5", "tipo": "vencimiento", "fecha": "2025-02-18", "monto": None, "moneda": "ARS", "desc": "Vto. LECER Feb 2025"},
-    {"ticker": "X21A5", "tipo": "vencimiento", "fecha": "2025-04-21", "monto": None, "moneda": "ARS", "desc": "Vto. LECER Abr 2025"},
-    {"ticker": "X16G5", "tipo": "vencimiento", "fecha": "2025-08-16", "monto": None, "moneda": "ARS", "desc": "Vto. LECER Ago 2025"},
-    {"ticker": "X17O5", "tipo": "vencimiento", "fecha": "2025-10-17", "monto": None, "moneda": "ARS", "desc": "Vto. LECER Oct 2025"},
-]
-
-# Tickers para buscar dividendos en Yahoo Finance
-DIVIDEND_TICKERS_ACCIONES = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AMD",
-    "KO", "PEP", "WMT", "JPM", "BAC", "MCD", "NKE", "DIS",
-    "MELI", "BABA", "PYPL", "UBER",
-    # ETFs con dividendos
-    "SPY", "QQQ", "IVV", "DIA", "IWM", "GLD", "EEM", "XLE", "XLF",
-    "VIG", "EWZ", "GDX",
-]
-
-def get_dividendos_yahoo(tickers: list) -> list:
-    """Obtiene próximos dividendos de Yahoo Finance para una lista de tickers."""
-    eventos = []
-    for ticker in tickers:
-        try:
-            t = yf.Ticker(ticker)
-            info = t.info
-            ex_div_date = info.get("exDividendDate")
-            div_rate = info.get("dividendRate") or info.get("trailingAnnualDividendRate")
-
-            if ex_div_date and div_rate and div_rate > 0:
-                from datetime import datetime, timezone
-                fecha = datetime.fromtimestamp(ex_div_date, tz=timezone.utc).strftime("%Y-%m-%d")
-                # Dividendo por pago (trimestral = anual / 4)
-                div_por_pago = round(div_rate / 4, 4)
-                eventos.append({
-                    "ticker": ticker,
-                    "tipo": "dividendo",
-                    "fecha": fecha,
-                    "monto": div_por_pago,
-                    "moneda": "USD",
-                    "desc": f"Dividendo {ticker} (ex-date)"
-                })
-                print(f"  💵 {ticker}: ex-div {fecha} · ${div_por_pago:.4f}/acción")
-        except Exception as e:
-            print(f"  ⚠️  {ticker} dividendo error: {e}")
-    return eventos
-
-def actualizar_eventos_calendario():
-    print("\n📅 Actualizando eventos de calendario...")
-
-    # 1. Limpiar eventos futuros (mantener históricos)
-    try:
-        from datetime import date
-        hoy = date.today().isoformat()
-        supabase.table("eventos_calendario").delete().gte("fecha", hoy).execute()
-    except Exception as e:
-        print(f"  ⚠️  Error limpiando eventos: {e}")
-
-    todos_eventos = []
-
-    # 2. Bonos y letras hardcodeados
-    todos_eventos.extend(BOND_EVENTS)
-    print(f"  📋 Bonos/Letras: {len(BOND_EVENTS)} eventos cargados")
-
-    # 3. Dividendos desde Yahoo Finance
-    print("  🔍 Buscando dividendos en Yahoo Finance...")
-    divs = get_dividendos_yahoo(DIVIDEND_TICKERS_ACCIONES)
-    todos_eventos.extend(divs)
-    print(f"  💵 Dividendos encontrados: {len(divs)}")
-
-    # 4. Insertar en Supabase
-    insertados = 0
-    for ev in todos_eventos:
-        try:
-            supabase.table("eventos_calendario").insert({
-                "ticker": ev["ticker"],
-                "tipo": ev["tipo"],
-                "fecha": ev["fecha"],
-                "monto_por_unidad": ev.get("monto"),
-                "moneda": ev.get("moneda", "USD"),
-                "descripcion": ev.get("desc", ""),
-            }).execute()
-            insertados += 1
-        except Exception as e:
-            print(f"  ❌ Error insertando {ev['ticker']} {ev['fecha']}: {e}")
-
-    print(f"  ✅ Eventos calendario actualizados: {insertados}")    
     while True:
         main()
         print("💤 Esperando 5 minutos...")

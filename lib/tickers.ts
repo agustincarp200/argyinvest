@@ -107,6 +107,7 @@ export const TICKERS_CONOCIDOS: TickerSugerido[] = [
   { ticker: 'HARG', nombre: 'Holcim Argentina', categoria: 'byma', moneda: 'ARS' },
   { ticker: 'MOLI', nombre: 'Molinos Río de la Plata', categoria: 'byma', moneda: 'ARS' },
   { ticker: 'AGRO', nombre: 'Agrometal', categoria: 'byma', moneda: 'ARS' },
+  { ticker: 'VIST', nombre: 'Vista Energy', categoria: 'byma', moneda: 'ARS' },
 
   // Crypto
   { ticker: 'BTC', nombre: 'Bitcoin', categoria: 'crypto', moneda: 'USD' },
@@ -161,6 +162,11 @@ export const TICKERS_CONOCIDOS: TickerSugerido[] = [
   { ticker: 'S31D5', nombre: 'LECAP Dic 2025', categoria: 'letra', moneda: 'ARS' },
   { ticker: 'S30J6', nombre: 'LECAP Jun 2026', categoria: 'letra', moneda: 'ARS' },
   { ticker: 'S31D6', nombre: 'LECAP Dic 2026', categoria: 'letra', moneda: 'ARS' },
+  { ticker: 'S31G6', nombre: 'LECAP Jul 2026', categoria: 'letra', moneda: 'ARS' },
+  { ticker: 'S30O6', nombre: 'LECAP Oct 2026', categoria: 'letra', moneda: 'ARS' },
+
+  // FCIs
+  { ticker: 'ADBAICA', nombre: 'Adcap Renta Pesos (ex-AdBaicA)', categoria: 'fci', moneda: 'ARS' },
 ];
 
 export function buscarTickers(query: string): TickerSugerido[] {
