@@ -20,7 +20,7 @@ BYMA    = [
     "VIST.BA",
 ]
 
-# Bonos y letras CER — Yahoo primero, coeficiente diario como fallback
+# Bonos y letras CER
 CER_BONOS = [
     "TX26.BA", "TX27.BA", "TX28.BA", "TX29.BA", "TX30.BA",
     "DICP.BA", "PARP.BA",
@@ -30,18 +30,11 @@ CER_BONOS = [
     "S31G6.BA", "S30O6.BA",
 ]
 
-# Ratio CEDEARs de acciones: 1 CEDEAR = 1/N acción original
+# Ratio CEDEARs de acciones
 CEDEAR_RATIO = {
-    "AAPL":  1/20,
-    "GOOGL": 1/58,
-    "MSFT":  1/25,
-    "AMZN":  1/144,
-    "NVDA":  1/10,
-    "META":  1/10,
-    "TSLA":  1/15,
-    "AMD":   1/10,
-    "BABA":  1/9,
-    "MELI":  1/100,
+    "AAPL":  1/20, "GOOGL": 1/58, "MSFT":  1/25, "AMZN":  1/144,
+    "NVDA":  1/10, "META":  1/10, "TSLA":  1/15, "AMD":   1/10,
+    "BABA":  1/9,  "MELI":  1/100,
 }
 
 # ── ETFs CEDEAR ────────────────────────────────────────
@@ -65,6 +58,22 @@ CEDEAR_ETF_RATIO = {
     "GDX":  1/10, "ARKK": 1/10, "IBB":  1/27, "IBIT": 1/10,
     "ETHA": 1/5,  "SH":   1/8,  "PSQ":  1/8,  "VIG":  1/39,
     "IJH":  1/12, "USO":  1/15, "FXI":  1/5,
+}
+
+# ── FCIs conocidos: ticker_corto → fragmento del nombre en ArgentinaDatos ──
+# El worker buscará el fondo cuyo nombre contenga el fragmento y guardará
+# el precio en precios_cache con el ticker corto para que la app lo encuentre
+FCI_TICKERS_MAP = {
+    "ADBAICA":  "adcap cobertura",
+    "PCOMAGB":  "compass renta mixta",
+    "IOLDOLD":  "iol dolar",
+    "BALANZ":   "balanz ahorro",
+    "COMAGBS":  "compass",
+    "MAGPESO":  "mariva",
+    "SUPAHORO": "supervielle ahorro",
+    "GALAHORO": "galicia ahorro",
+    "PELLUCRO":  "pellegrini",
+    "PRIUSD":   "premier capital",
 }
 
 # ── DOLAR ──────────────────────────────────────────────
@@ -228,6 +237,7 @@ def get_fci_penultimo(url):
 def actualizar_fcis():
     print("\n📊 Actualizando FCIs desde ArgentinaDatos...")
     actualizados = 0
+    fci_encontrados = {}  # ticker_corto → {vcp, variacion}
 
     for categoria, url in ENDPOINTS_FCI.items():
         fondos_hoy = get_fci_por_categoria(categoria, url)
@@ -244,7 +254,7 @@ def actualizar_fcis():
 
             vcp_ayer = vcps_ayer.get(nombre, 0)
             variacion = ((vcp_hoy - vcp_ayer) / vcp_ayer * 100) if vcp_ayer > 0 else 0
-            ticker = "FCI_" + nombre[:40].upper().replace(" ", "_").replace("/", "_").replace("-", "_")
+            ticker_largo = "FCI_" + nombre[:40].upper().replace(" ", "_").replace("/", "_").replace("-", "_")
 
             cat_interna = categoria
             nombre_lower = nombre.lower()
@@ -258,25 +268,41 @@ def actualizar_fcis():
                 cat_interna = "pymes"
 
             id_unico = abs(hash(nombre)) % 10**8
+            moneda = "USD" if cat_interna in ["dollar_linked", "renta_fija_usd", "renta_variable_usd"] else "ARS"
 
             try:
                 supabase.table("fci_cache").upsert({
                     "id_cafci": id_unico,
-                    "ticker": ticker,
+                    "ticker": ticker_largo,
                     "nombre": nombre,
                     "categoria": cat_interna,
                     "cuotaparte": round(vcp_hoy, 6),
                     "variacion_diaria": round(variacion, 4),
                     "rendimiento_30d": None,
                     "rendimiento_1a": None,
-                    "moneda": "USD" if cat_interna in ["dollar_linked", "renta_fija_usd", "renta_variable_usd"] else "ARS",
+                    "moneda": moneda,
                     "updated_at": datetime.now().isoformat(),
                 }, on_conflict="id_cafci").execute()
                 actualizados += 1
             except Exception as e:
                 print(f"    ❌ Error guardando {nombre[:30]}: {e}")
 
-    print(f"\n  📦 FCIs actualizados: {actualizados}")
+            # Buscar si este fondo matchea algún ticker corto conocido
+            for ticker_corto, fragmento in FCI_TICKERS_MAP.items():
+                if fragmento.lower() in nombre_lower:
+                    fci_encontrados[ticker_corto] = {
+                        "vcp": vcp_hoy,
+                        "variacion": variacion,
+                        "moneda": moneda,
+                        "nombre": nombre,
+                    }
+
+    # Guardar FCIs conocidos en precios_cache con ticker corto
+    for ticker_corto, data in fci_encontrados.items():
+        guardar_precios(ticker_corto, data["vcp"], data["variacion"], data["moneda"], "fci", "argentinadatos_fci")
+        print(f"  📦 FCI {ticker_corto}: {data['vcp']:.4f} ({data['nombre'][:30]})")
+
+    print(f"\n  📦 FCIs actualizados: {actualizados} · Conocidos en cache: {len(fci_encontrados)}")
 
 # ── PRECIOS CACHE ──────────────────────────────────────
 def guardar_precios(ticker, precio, cambio, moneda, categoria, fuente):
@@ -381,17 +407,17 @@ BOND_EVENTS = [
     {"ticker": "GD41", "tipo": "amortizacion", "fecha": "2041-01-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. GD41"},
     {"ticker": "GD46", "tipo": "cupon",        "fecha": "2026-07-09", "monto": 3.625, "moneda": "USD", "desc": "Cupón GD46"},
     {"ticker": "GD46", "tipo": "amortizacion", "fecha": "2046-01-09", "monto": 100.0, "moneda": "USD", "desc": "Vto. GD46"},
-    {"ticker": "TX26", "tipo": "cupon",        "fecha": "2026-05-09", "monto": None,  "moneda": "ARS", "desc": "Cupón CER TX26"},
-    {"ticker": "TX26", "tipo": "amortizacion", "fecha": "2026-11-09", "monto": None,  "moneda": "ARS", "desc": "Vto. TX26"},
-    {"ticker": "TX28", "tipo": "cupon",        "fecha": "2026-05-09", "monto": None,  "moneda": "ARS", "desc": "Cupón CER TX28"},
-    {"ticker": "TX28", "tipo": "cupon",        "fecha": "2026-11-09", "monto": None,  "moneda": "ARS", "desc": "Cupón CER TX28"},
-    {"ticker": "TX28", "tipo": "amortizacion", "fecha": "2028-11-09", "monto": None,  "moneda": "ARS", "desc": "Vto. TX28"},
-    {"ticker": "TZX26", "tipo": "vencimiento", "fecha": "2026-06-30", "monto": None,  "moneda": "ARS", "desc": "Vto. TZX26"},
-    {"ticker": "TZX27", "tipo": "vencimiento", "fecha": "2027-06-30", "monto": None,  "moneda": "ARS", "desc": "Vto. TZX27"},
-    {"ticker": "S30J6",  "tipo": "vencimiento", "fecha": "2026-06-30", "monto": None,  "moneda": "ARS", "desc": "Vto. LECAP Jun 2026"},
-    {"ticker": "S31G6",  "tipo": "vencimiento", "fecha": "2026-07-31", "monto": None,  "moneda": "ARS", "desc": "Vto. LECAP Jul 2026"},
-    {"ticker": "S30O6",  "tipo": "vencimiento", "fecha": "2026-10-30", "monto": None,  "moneda": "ARS", "desc": "Vto. LECAP Oct 2026"},
-    {"ticker": "S31D6",  "tipo": "vencimiento", "fecha": "2026-12-31", "monto": None,  "moneda": "ARS", "desc": "Vto. LECAP Dic 2026"},
+    {"ticker": "TX26",  "tipo": "cupon",        "fecha": "2026-05-09", "monto": None, "moneda": "ARS", "desc": "Cupón CER TX26"},
+    {"ticker": "TX26",  "tipo": "amortizacion", "fecha": "2026-11-09", "monto": None, "moneda": "ARS", "desc": "Vto. TX26"},
+    {"ticker": "TX28",  "tipo": "cupon",        "fecha": "2026-05-09", "monto": None, "moneda": "ARS", "desc": "Cupón CER TX28"},
+    {"ticker": "TX28",  "tipo": "cupon",        "fecha": "2026-11-09", "monto": None, "moneda": "ARS", "desc": "Cupón CER TX28"},
+    {"ticker": "TX28",  "tipo": "amortizacion", "fecha": "2028-11-09", "monto": None, "moneda": "ARS", "desc": "Vto. TX28"},
+    {"ticker": "TZX26", "tipo": "vencimiento",  "fecha": "2026-06-30", "monto": None, "moneda": "ARS", "desc": "Vto. TZX26"},
+    {"ticker": "TZX27", "tipo": "vencimiento",  "fecha": "2027-06-30", "monto": None, "moneda": "ARS", "desc": "Vto. TZX27"},
+    {"ticker": "S30J6", "tipo": "vencimiento",  "fecha": "2026-06-30", "monto": None, "moneda": "ARS", "desc": "Vto. LECAP Jun 2026"},
+    {"ticker": "S31G6", "tipo": "vencimiento",  "fecha": "2026-07-31", "monto": None, "moneda": "ARS", "desc": "Vto. LECAP Jul 2026"},
+    {"ticker": "S30O6", "tipo": "vencimiento",  "fecha": "2026-10-30", "monto": None, "moneda": "ARS", "desc": "Vto. LECAP Oct 2026"},
+    {"ticker": "S31D6", "tipo": "vencimiento",  "fecha": "2026-12-31", "monto": None, "moneda": "ARS", "desc": "Vto. LECAP Dic 2026"},
 ]
 
 DIVIDEND_TICKERS_ACCIONES = [
@@ -432,8 +458,7 @@ def actualizar_eventos_calendario():
     except Exception as e:
         print(f"  ⚠️  Error limpiando eventos: {e}")
 
-    todos_eventos = []
-    todos_eventos.extend(BOND_EVENTS)
+    todos_eventos = list(BOND_EVENTS)
     print(f"  📋 Bonos/Letras: {len(BOND_EVENTS)} eventos cargados")
 
     print("  🔍 Buscando dividendos en Yahoo Finance...")

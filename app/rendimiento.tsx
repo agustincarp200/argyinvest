@@ -3,6 +3,7 @@ import { useTheme } from '@/lib/theme';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Line, Path, Svg, Text as SvgText } from 'react-native-svg';
 
 const WIDTH = Dimensions.get('window').width - 40;
@@ -127,6 +128,7 @@ function GraficoBenchmark({ cartera, sp500, inflacion, timestamps, colorCartera 
 
 export default function Rendimiento() {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = getStyles(theme);
 
   const [posiciones, setPosiciones] = useState<Posicion[]>([]);
@@ -214,7 +216,6 @@ export default function Rendimiento() {
     setCargandoGrafico(true);
 
     try {
-      // Calcular fecha más antigua de compra si el período es "compra"
       let period1: number | null = null;
       if (periodo.range === 'compra') {
         const fechas = activos
@@ -250,7 +251,8 @@ export default function Rendimiento() {
       });
 
       const resultados = await Promise.all(promesas);
-      const validos = resultados.filter(r => r.timestamps.length > 0);
+      // Solo incluir activos con datos de Yahoo (ignorar bonos/letras sin datos)
+      const validos = resultados.filter(r => r.timestamps.length > 1 && r.closes.some((c: any) => c !== null && !isNaN(c)));
       if (validos.length === 0) { setDatosPesos([]); setTimestamps([]); setCargandoGrafico(false); return; }
 
       const minLen = Math.min(...validos.map(r => r.timestamps.length));
@@ -308,15 +310,15 @@ export default function Rendimiento() {
   }
 
   const benchmarks = [
-    { label: 'Tu cartera', valor: variacion,      color: colorLinea,  icono: '💼' },
-    { label: 'S&P 500',    valor: sp500Total,      color: '#A855F7',   icono: '🇺🇸' },
-    { label: 'Inflación IPC', valor: inflacionTotal, color: '#FF9D4D', icono: '📊' },
+    { label: 'Tu cartera',    valor: variacion,      color: colorLinea,  icono: '💼' },
+    { label: 'S&P 500',       valor: sp500Total,      color: '#A855F7',   icono: '🇺🇸' },
+    { label: 'Inflación IPC', valor: inflacionTotal,  color: '#FF9D4D',   icono: '📊' },
   ];
 
   return (
     <ScrollView style={styles.container}>
 
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBoton}>
           <Text style={styles.backTexto}>‹ Volver</Text>
         </TouchableOpacity>
@@ -364,7 +366,7 @@ export default function Rendimiento() {
             ) : datosGrafico.length < 2 ? (
               <View style={styles.loadingGrafico}>
                 <Text style={styles.loadingTexto}>
-                  {activosFiltrados.length === 0 ? 'Sin activos en esta categoría' : 'No hay datos disponibles'}
+                  {activosFiltrados.length === 0 ? 'Sin activos en esta categoría' : 'No hay datos suficientes para este período'}
                 </Text>
               </View>
             ) : modoGrafico === 'porcentaje' && (sp500Pct.length >= 2 || inflacionPct.length >= 2) ? (
@@ -510,7 +512,7 @@ export default function Rendimiento() {
 
 const getStyles = (theme: any) => StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.bg },
-  header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 10 },
+  header: { paddingHorizontal: 20, paddingBottom: 10 },
   backBoton: { alignSelf: 'flex-start' },
   backTexto: { color: theme.green, fontSize: 17, fontWeight: '600' },
   titulo: { color: theme.white, fontSize: 24, fontWeight: '900', paddingHorizontal: 20, marginBottom: 16 },

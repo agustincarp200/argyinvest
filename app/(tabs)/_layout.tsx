@@ -28,11 +28,6 @@ export default function TabLayout() {
         tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} />,
       }} />
 
-      <Tabs.Screen name="mercado" options={{
-        title: 'Mercado',
-        tabBarIcon: ({ color }) => <TabIcon emoji="📰" color={color} />,
-      }} />
-
       <Tabs.Screen name="graficos" options={{
         title: 'Gráficos',
         tabBarIcon: ({ color }) => <TabIcon emoji="📈" color={color} />,
@@ -49,6 +44,7 @@ export default function TabLayout() {
       }} />
 
       {/* Ocultos del tab bar */}
+      <Tabs.Screen name="mercado" options={{ href: null }} />
       <Tabs.Screen name="calendario" options={{ href: null }} />
       <Tabs.Screen name="perfil" options={{ href: null }} />
       <Tabs.Screen name="explore" options={{ href: null }} />
